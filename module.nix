@@ -32,8 +32,8 @@ in
       description = "ipwatch";
       serviceConfig = {
         Type = "simple";
-        User = users.users.ipwatch.name;
-        Group = users.groups.ipwatch.name;
+        User = config.users.users.ipwatch.name;
+        Group = config.users.groups.ipwatch.name;
         ExecStart = "${pkgs.ipwatch}/bin/ipwatch -exe ${cfg.exe}${lib.optionalString (cfg.iface != "") " -iface ${cfg.iface}"}";
       };
       bindsTo = lib.mkIf (cfg.iface != "") [ "sys-subsystem-net-devices-${cfg.iface}.device" ];
