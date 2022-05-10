@@ -20,7 +20,7 @@
     in
     {
       devShells.default = pkgs.mkShell {
-        buildInputs = [ pkgs.go_1_18 ];
+        buildInputs = with pkgs; [ fd entr go_1_18 ];
       };
       packages.default = pkgs.ipwatch;
       apps.default = flake-utils.lib.mkApp {
