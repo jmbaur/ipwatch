@@ -21,12 +21,19 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    users.users.ipwatch = {
+      isSystemUser = true;
+      group = "ipwatch";
+    };
+    users.groups.ipwatch = { };
+
     systemd.services.ipwatch = {
       enable = true;
       description = "ipwatch";
       serviceConfig = {
         Type = "simple";
-        DynamicUser = "yes";
+        User = users.users.ipwatch.name;
+        Group = users.groups.ipwatch.name;
         ExecStart = "${pkgs.ipwatch}/bin/ipwatch -exe ${cfg.exe}${lib.optionalString (cfg.iface != "") " -iface ${cfg.iface}"}";
       };
       bindsTo = lib.mkIf (cfg.iface != "") [ "sys-subsystem-net-devices-${cfg.iface}.device" ];

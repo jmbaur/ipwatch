@@ -56,13 +56,14 @@ func main() {
 
 				cmd.Stdout = os.Stdout
 				cmd.Stderr = os.Stderr
+				cmd.Env = append(cmd.Env, os.Environ()...)
 				cmd.Env = append(cmd.Env, fmt.Sprintf("IFACE=%s", iface.Name))
 				cmd.Env = append(cmd.Env, fmt.Sprintf("ADDR=%s", ip))
-				log.Println("--------------------------------------------------------------------------------")
+				log.Println("================================================================================")
 				if err := cmd.Run(); err != nil {
 					log.Printf("Error running exe: %v", err)
 				}
-				log.Println("--------------------------------------------------------------------------------")
+				log.Println("================================================================================")
 			}
 		}
 	}
