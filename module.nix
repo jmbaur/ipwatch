@@ -12,7 +12,7 @@ in
       '';
     };
     iface = lib.mkOption {
-      type = lib.types.string;
+      type = lib.types.str;
       default = "";
       description = ''
         The interface to listen for changes on
@@ -21,13 +21,6 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    assertions = [{
-      assertion = cfg.exe != "";
-      message = ''
-        services.ipwatch.exe option must be non-empty
-      '';
-    }];
-
     systemd.services.ipwatch = {
       enable = true;
       description = "ipwatch";
