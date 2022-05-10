@@ -7,6 +7,7 @@
   };
 
   outputs = { self, nixpkgs, flake-utils }: {
+    nixosModules.default = import ./module.nix;
     overlays.default = final: prev: {
       ipwatch = prev.callPackage ./ipwatch.nix { };
     };
@@ -22,7 +23,6 @@
       devShells.default = pkgs.mkShell {
         buildInputs = with pkgs; [ fd entr go_1_18 ];
       };
-      nixosModules.default = import ./module.nix;
       packages.default = pkgs.ipwatch;
       apps.default = flake-utils.lib.mkApp {
         drv = pkgs.ipwatch;
