@@ -24,8 +24,8 @@ in
     systemd.services.ipwatch = {
       enable = true;
       description = "ipwatch";
-      unitConfig = "simple";
       serviceConfig = {
+        Type = "simple";
         DynamicUser = "yes";
         ExecStart = "${pkgs.ipwatch}/bin/ipwatch -exe ${cfg.exe}${lib.optionalString (cfg.iface != "") " -iface ${cfg.iface}"}";
       };
