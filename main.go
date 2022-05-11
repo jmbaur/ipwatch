@@ -23,8 +23,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	cmd := exec.Command(filepath.Join(*exeToRun))
-
 	c, err := netlink.Dial(unix.NETLINK_ROUTE, &netlink.Config{
 		Groups: unix.RTMGRP_IPV4_IFADDR,
 	})
@@ -54,6 +52,7 @@ func main() {
 
 				ip := net.IPv4(msg.Data[12], msg.Data[13], msg.Data[14], msg.Data[15])
 
+				cmd := exec.Command(filepath.Join(*exeToRun))
 				cmd.Stdout = os.Stdout
 				cmd.Stderr = os.Stderr
 				cmd.Env = append(cmd.Env, os.Environ()...)
