@@ -21,11 +21,18 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    users.users.ipwatch = {
+      isSystemUser = true;
+      group = "ipwatch";
+    };
+    users.groups.ipwatch = { };
+
     systemd.services.ipwatch = {
       enable = true;
       description = "ipwatch";
       serviceConfig = {
-        DynamicUser = "yes";
+        User = config.users.users.ipwatch.name;
+        Group = config.users.groups.ipwatch.name;
         Type = "simple";
         ExecStart = "${pkgs.ipwatch}/bin/ipwatch -exe ${cfg.exe}${lib.optionalString (cfg.iface != "") " -iface ${cfg.iface}"}";
       };
