@@ -68,11 +68,10 @@ func main() {
 						newIP = net.IPv4(ip[0], ip[1], ip[2], ip[3]).String()
 					case unix.IFA_LABEL:
 						ifaceName = decoder.String()
+						if *ifaceOfInterest != "" && ifaceName != *ifaceOfInterest {
+							continue
+						}
 					}
-				}
-
-				if *ifaceOfInterest != "" && ifaceName != *ifaceOfInterest {
-					continue
 				}
 
 				cmd := exec.Command(filepath.Join(*exeToRun))
