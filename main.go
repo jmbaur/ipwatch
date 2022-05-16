@@ -15,7 +15,7 @@ import (
 
 func main() {
 	exeToRun := flag.String("exe", "", "The path to an executable to run")
-	ifaceName := flag.String("iface", "", "The interface to listen for changes on")
+	ifaceOfInterest := flag.String("iface", "", "The interface to listen for changes on")
 	flag.Parse()
 
 	if *exeToRun == "" {
@@ -40,24 +40,46 @@ func main() {
 			break
 		}
 		for _, msg := range msgs {
+			if msg.Header.Type == unix.NLMSG_DONE {
+				continue
+			}
+			if msg.Header.Type == unix.NLMSG_ERROR {
+				log.Println("error TODO: ", msg.Data)
+				continue
+			}
 			if msg.Header.Type == unix.RTM_NEWADDR {
-				iface, err := net.InterfaceByIndex(int(msg.Data[4]))
+				var ifaceName, newIP string
+
+				decoder, err := netlink.NewAttributeDecoder(msg.Data[unix.SizeofIfAddrmsg:])
 				if err != nil {
 					log.Println(err)
 					continue
 				}
-				if *ifaceName != "" && iface.Name != *ifaceName {
-					continue
+
+				for decoder.Next() {
+					switch decoder.Type() {
+					case unix.IFA_ADDRESS:
+						ip := decoder.Bytes()
+						if len(ip) != 4 {
+							log.Println("Did not get correct number of bytes")
+							continue
+						}
+						newIP = net.IPv4(ip[0], ip[1], ip[2], ip[3]).String()
+					case unix.IFA_LABEL:
+						ifaceName = decoder.String()
+					}
 				}
 
-				ip := net.IPv4(msg.Data[12], msg.Data[13], msg.Data[14], msg.Data[15])
+				if *ifaceOfInterest != "" && ifaceName != *ifaceOfInterest {
+					continue
+				}
 
 				cmd := exec.Command(filepath.Join(*exeToRun))
 				cmd.Stdout = os.Stdout
 				cmd.Stderr = os.Stderr
 				cmd.Env = append(cmd.Env, os.Environ()...)
-				cmd.Env = append(cmd.Env, fmt.Sprintf("IFACE=%s", iface.Name))
-				cmd.Env = append(cmd.Env, fmt.Sprintf("ADDR=%s", ip))
+				cmd.Env = append(cmd.Env, fmt.Sprintf("IFACE=%s", ifaceName))
+				cmd.Env = append(cmd.Env, fmt.Sprintf("ADDR=%s", newIP))
 				log.Println("================================================================================")
 				if err := cmd.Run(); err != nil {
 					log.Printf("Error running exe: %v", err)
