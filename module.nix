@@ -1,36 +1,43 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, utils, ... }:
 let
   cfg = config.services.ipwatch;
+  interfacesFlag = lib.concatSringsSep "," cfg.interfaces;
+  deps = map (iface: "sys-subsystem-net-devices-${utils.escapeSystemdPath iface}.device") cfg.interfaces;
 in
+with lib;
 {
   options.services.ipwatch = {
-    enable = lib.mkEnableOption "Enable ipwatch service";
-    exe = lib.mkOption {
-      type = lib.types.path;
+    enable = mkEnableOption "Enable ipwatch service";
+    hookScript = mkOption {
+      type = types.path;
       description = ''
-        The path to an executable to run
+        The path to an executable/script to run after receiving a new IP
+        address.
       '';
     };
-    iface = lib.mkOption {
-      type = lib.types.str;
-      default = "";
+    interfaces = lib.mkOption {
+      type = types.listOf types.str;
+      default = [ ];
       description = ''
-        The interface to listen for changes on
+        The interfaces to listen for changes on.
       '';
     };
   };
 
-  config = lib.mkIf cfg.enable {
+  config = mkIf cfg.enable {
     systemd.services.ipwatch = {
       enable = true;
       description = "ipwatch";
       serviceConfig = {
         DynamicUser = "yes";
         Type = "simple";
-        ExecStart = "${pkgs.ipwatch}/bin/ipwatch -exe ${cfg.exe}${lib.optionalString (cfg.iface != "") " -iface ${cfg.iface}"}";
+        ExecStart = "${pkgs.ipwatch}/bin/ipwatch -hook-script ${cfg.hookScript} -interfaces ${interfacesFlag}";
       };
-      bindsTo = lib.mkIf (cfg.iface != "") [ "sys-subsystem-net-devices-${cfg.iface}.device" ];
-      wantedBy = [ "multi-user.target" ];
+      wantedBy = [ "multi-user.target" ] ++ deps;
+      wants = [ "network.target" ];
+      bindsTo = deps;
+      after = deps;
+      before = [ "network.target" ];
     };
   };
 }

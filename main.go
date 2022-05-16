@@ -8,20 +8,23 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/mdlayher/netlink"
 	"golang.org/x/sys/unix"
 )
 
 func main() {
-	exeToRun := flag.String("exe", "", "The path to an executable to run")
-	ifaceOfInterest := flag.String("iface", "", "The interface to listen for changes on")
+	exeToRun := flag.String("hook-script", "", "The path to an executable/script to run on IP address change")
+	ifacesFlag := flag.String("interfaces", "", "A comma-separated list of interfaces to notify for changes")
 	flag.Parse()
 
 	if *exeToRun == "" {
 		flag.Usage()
 		os.Exit(1)
 	}
+
+	ifacesOfInterest := strings.Split(*ifacesFlag, ",")
 
 	c, err := netlink.Dial(unix.NETLINK_ROUTE, &netlink.Config{
 		Groups: unix.RTMGRP_IPV4_IFADDR,
@@ -68,7 +71,11 @@ func main() {
 						newIP = net.IPv4(ip[0], ip[1], ip[2], ip[3]).String()
 					case unix.IFA_LABEL:
 						ifaceName = decoder.String()
-						if *ifaceOfInterest != "" && ifaceName != *ifaceOfInterest {
+						interested := false
+						for _, iface := range ifacesOfInterest {
+							interested = ifaceName == iface
+						}
+						if !interested {
 							continue
 						}
 					}
