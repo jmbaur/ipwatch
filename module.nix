@@ -1,7 +1,7 @@
 { config, lib, pkgs, utils, ... }:
 let
   cfg = config.services.ipwatch;
-  interfacesFlag = lib.concatSringsSep "," cfg.interfaces;
+  interfacesFlag = lib.concatStringsSep "," cfg.interfaces;
   deps = map (iface: "sys-subsystem-net-devices-${utils.escapeSystemdPath iface}.device") cfg.interfaces;
 in
 with lib;
