@@ -44,7 +44,8 @@ func main() {
 				continue
 			}
 			if msg.Header.Type == unix.NLMSG_ERROR {
-				log.Println("error TODO: ", msg.Data)
+				// TODO(jared): parse error
+				log.Println("NLMSG_ERROR", msg.Data)
 				continue
 			}
 			if msg.Header.Type == unix.RTM_NEWADDR {
