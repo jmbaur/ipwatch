@@ -24,7 +24,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	ifacesOfInterest := strings.Split(*ifacesFlag, ",")
+	ifacesOfInterest := strings.FieldsFunc(*ifacesFlag, func(r rune) bool {
+		return r == ','
+	})
 
 	c, err := netlink.Dial(unix.NETLINK_ROUTE, &netlink.Config{
 		Groups: unix.RTMGRP_IPV4_IFADDR,
@@ -34,7 +36,11 @@ func main() {
 	}
 	defer c.Close()
 
-	log.Println("listening for IPv4 address changes")
+	if len(ifacesOfInterest) > 0 {
+		log.Printf("listening for IPv4 address changes on %s\n", ifacesOfInterest)
+	} else {
+		log.Println("listening for IPv4 address changes on all interfaces")
+	}
 
 	for {
 		msgs, err := c.Receive()
