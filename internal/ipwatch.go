@@ -103,9 +103,8 @@ func Logic(maxRetries int, ifaces []string, scripts []string) error {
 				}
 			}
 
-			oldIP, ok := cache[ifaceName]
-			if ok && oldIP.String() == newIP.String() {
-				log.Printf("New IP for %s has not changed, not calling hook script\n", ifaceName)
+			if oldIP, ok := cache[ifaceName]; ok && oldIP.String() == newIP.String() {
+				log.Printf("New IP for %s has not changed, not calling scripts\n", ifaceName)
 				continue
 			}
 
