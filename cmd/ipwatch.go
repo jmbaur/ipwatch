@@ -10,45 +10,52 @@ import (
 	"github.com/jmbaur/ipwatch/internal"
 )
 
-var ErrNoHookScript = errors.New("Did not provide hook script")
+var ErrNoScripts = errors.New("no scripts to run")
 
 func Run() error {
-	exeToRun := flag.String(
-		"hook-script",
-		"",
-		"The path to an executable/script to run on IP address change",
+	scripts := []string{}
+	ifaces := []string{}
+
+	maxRetries := flag.Int(
+		"max-retries",
+		3,
+		"The maximum number of attempts that will be made for a failing script",
 	)
-	ifacesFlag := flag.String(
-		"interfaces",
-		"",
-		"A comma-separated list of interfaces to notify for changes",
+	flag.Func(
+		"script",
+		"The path to an executable/script to run on IP address change",
+		func(script string) error {
+			scripts = append(scripts, filepath.Join(script))
+			return nil
+		},
+	)
+	flag.Func(
+		"interface",
+		"The name of an interface to notify for changes",
+		func(iface string) error {
+			ifaces = append(ifaces, iface)
+			return nil
+		},
 	)
 	flag.Parse()
 
-	if *exeToRun == "" {
-		return ErrNoHookScript
+	if len(scripts) == 0 {
+		return ErrNoScripts
 	}
 
-	ifacesOfInterest := strings.FieldsFunc(*ifacesFlag, func(r rune) bool {
-		return r == ','
-	})
-
-	if len(ifacesOfInterest) > 0 {
+	if len(ifaces) > 0 {
 		log.Printf(
-			"listening for IPv4 address changes on %s\n",
-			ifacesOfInterest,
+			"Listening for IPv4 address changes on %s\n",
+			strings.Join(ifaces, ", "),
 		)
 	} else {
 		log.Println(
-			"listening for IPv4 address changes on all interfaces",
+			"Listening for IPv4 address changes on all interfaces",
 		)
 	}
 
-	if err := internal.Loop(
-		ifacesOfInterest,
-		filepath.Join(*exeToRun),
-	); err != nil {
-		log.Fatal(err)
+	if err := internal.Logic(*maxRetries, ifaces, scripts); err != nil {
+		return err
 	}
 
 	return nil

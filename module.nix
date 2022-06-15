@@ -1,25 +1,23 @@
 { config, lib, pkgs, utils, ... }:
 let
   cfg = config.services.ipwatch;
-  interfacesFlag = lib.concatStringsSep "," cfg.interfaces;
   deps = map (iface: "sys-subsystem-net-devices-${utils.escapeSystemdPath iface}.device") cfg.interfaces;
 in
 with lib;
 {
   options.services.ipwatch = {
     enable = mkEnableOption "Enable ipwatch service";
-    hookScript = mkOption {
-      type = types.path;
+    scripts = mkOption {
+      type = types.listOf types.path;
       description = ''
-        The path to an executable/script to run after receiving a new IP
-        address.
+        Scripts to run after receiving a new IP address.
       '';
     };
     interfaces = lib.mkOption {
       type = types.listOf types.str;
       default = [ ];
       description = ''
-        The interfaces to listen for changes on.
+        Interfaces to listen for changes on.
       '';
     };
   };
@@ -31,7 +29,7 @@ with lib;
       serviceConfig = {
         DynamicUser = "yes";
         Type = "simple";
-        ExecStart = "${pkgs.ipwatch}/bin/ipwatch -hook-script ${cfg.hookScript} -interfaces ${interfacesFlag}";
+        ExecStart = "${pkgs.ipwatch}/bin/ipwatch ${lib.concatMapStringsSep " " (iface: "-interface ${iface}")} ${lib.concatMapStringsSep " " (script: "-script ${script}") cfg.scripts}";
       };
       wantedBy = [ "multi-user.target" ] ++ deps;
       wants = [ "network.target" ];

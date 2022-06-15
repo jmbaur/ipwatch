@@ -22,7 +22,7 @@
     {
       devShells.default = pkgs.mkShell {
         CGO_ENABLED = 0;
-        buildInputs = with pkgs; [ fd entr go_1_18 ];
+        buildInputs = with pkgs; [ go-tools go_1_18 ];
       };
       packages.default = pkgs.ipwatch;
       apps.default = flake-utils.lib.mkApp {
