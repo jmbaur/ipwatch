@@ -29,7 +29,7 @@ with lib;
       serviceConfig = {
         DynamicUser = "yes";
         Type = "simple";
-        ExecStart = "${pkgs.ipwatch}/bin/ipwatch ${lib.concatMapStringsSep " " (iface: "-interface ${iface}")} ${lib.concatMapStringsSep " " (script: "-script ${script}") cfg.scripts}";
+        ExecStart = "${pkgs.ipwatch}/bin/ipwatch ${lib.concatMapStringsSep " " (iface: "-interface ${iface}") cfg.interfaces} ${lib.concatMapStringsSep " " (script: "-script ${script}") cfg.scripts}";
       };
       wantedBy = [ "multi-user.target" ] ++ deps;
       wants = [ "network.target" ];
