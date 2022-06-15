@@ -3,7 +3,7 @@ package cmd
 import (
 	"errors"
 	"flag"
-	"log"
+	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -44,12 +44,12 @@ func Run() error {
 	}
 
 	if len(ifaces) > 0 {
-		log.Printf(
+		fmt.Printf(
 			"Listening for IPv4 address changes on %s\n",
 			strings.Join(ifaces, ", "),
 		)
 	} else {
-		log.Println(
+		fmt.Println(
 			"Listening for IPv4 address changes on all interfaces",
 		)
 	}

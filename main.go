@@ -1,11 +1,15 @@
 package main
 
 import (
-	"log"
+	"fmt"
+	"os"
 
 	"github.com/jmbaur/ipwatch/cmd"
 )
 
 func main() {
-	log.Fatal(cmd.Run())
+	if err := cmd.Run(); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 }

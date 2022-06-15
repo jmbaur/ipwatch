@@ -3,7 +3,6 @@ package internal
 import (
 	"bytes"
 	"fmt"
-	"log"
 	"math"
 	"net"
 	"os"
@@ -15,8 +14,6 @@ import (
 	"github.com/mdlayher/netlink"
 	"golang.org/x/sys/unix"
 )
-
-var separator = strings.Repeat("=", 80)
 
 func getCache(ifaces []string) (map[string]net.IP, error) {
 	cache := make(map[string]net.IP)
@@ -64,7 +61,7 @@ func Logic(maxRetries int, ifaces []string, scripts []string) error {
 	for {
 		msgs, err := conn.Receive()
 		if err != nil {
-			log.Printf("Failed to receive messages: %v", err)
+			fmt.Printf("Failed to receive messages: %v", err)
 			break
 		}
 	messages:
@@ -78,7 +75,7 @@ func Logic(maxRetries int, ifaces []string, scripts []string) error {
 
 			ad, err := netlink.NewAttributeDecoder(msg.Data[unix.SizeofIfAddrmsg:])
 			if err != nil {
-				log.Printf("Could not get attribute decoder: %v", err)
+				fmt.Printf("Could not get attribute decoder: %v", err)
 				continue
 			}
 
@@ -87,7 +84,7 @@ func Logic(maxRetries int, ifaces []string, scripts []string) error {
 				case unix.IFA_ADDRESS:
 					ip := ad.Bytes()
 					if len(ip) != 4 {
-						log.Println("Did not get correct number of bytes")
+						fmt.Println("Did not get correct number of bytes")
 						continue
 					}
 					newIP = net.IPv4(ip[0], ip[1], ip[2], ip[3])
@@ -104,7 +101,7 @@ func Logic(maxRetries int, ifaces []string, scripts []string) error {
 			}
 
 			if oldIP, ok := cache[ifaceName]; ok && oldIP.String() == newIP.String() {
-				log.Printf("New IP for %s has not changed, not calling scripts\n", ifaceName)
+				fmt.Printf("New IP for %s has not changed, not calling scripts\n", ifaceName)
 				continue
 			}
 
@@ -172,9 +169,19 @@ func Logic(maxRetries int, ifaces []string, scripts []string) error {
 }
 
 func printOutput(outputs ...string) {
-	log.Println(separator)
+	var largest int
 	for _, output := range outputs {
-		log.Println(output)
+		for _, line := range strings.Split(output, "\n") {
+			if len(line) > largest {
+				largest = len(line)
+			}
+		}
 	}
-	log.Println(separator)
+
+	separator := strings.Repeat("-", largest)
+	fmt.Println(separator)
+	for _, output := range outputs {
+		fmt.Println(output)
+	}
+	fmt.Println(separator)
 }
