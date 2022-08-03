@@ -6,7 +6,7 @@
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, flake-utils }: {
+  outputs = inputs: with inputs; {
     nixosModules.default = import ./module.nix;
     overlays.default = final: prev: {
       ipwatch = prev.callPackage ./ipwatch.nix { };
@@ -15,14 +15,14 @@
   flake-utils.lib.eachDefaultSystem (system:
     let
       pkgs = import nixpkgs {
-        overlays = [ self.overlays.default ];
         inherit system;
+        overlays = [ self.overlays.default ];
       };
     in
     {
       devShells.default = pkgs.mkShell {
         CGO_ENABLED = 0;
-        buildInputs = with pkgs; [ go-tools go_1_18 ];
+        buildInputs = with pkgs; [ go-tools go ];
       };
       packages.default = pkgs.ipwatch;
       apps.default = flake-utils.lib.mkApp {

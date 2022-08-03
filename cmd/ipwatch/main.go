@@ -1,9 +1,10 @@
-package cmd
+package main
 
 import (
 	"errors"
 	"flag"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -12,7 +13,7 @@ import (
 
 var ErrNoScripts = errors.New("no scripts to run")
 
-func Run() error {
+func logic() error {
 	scripts := []string{}
 	ifaces := []string{}
 
@@ -59,4 +60,11 @@ func Run() error {
 	}
 
 	return nil
+}
+
+func main() {
+	if err := logic(); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 }

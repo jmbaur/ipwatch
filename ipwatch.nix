@@ -1,8 +1,8 @@
-{ buildGo118Module, lib }:
-buildGo118Module {
+{ buildGoModule, lib }:
+buildGoModule {
   pname = "ipwatch";
   version = "0.0.1";
   CGO_ENABLED = 0;
-  src = builtins.path { path = ./.; };
-  vendorSha256 = "sha256-i4m3Jxny1ibC9ul3lqzGt6e6oZQ8IsEr3absXFwNwvs=";
+  src = ./.;
+  vendorSha256 = "sha256-6jHBEG7GZ8GXGER0P+sTv3AMcm+RsILpfpDJo64hMpg=";
 }
