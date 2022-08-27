@@ -7,27 +7,21 @@
   };
 
   outputs = inputs: with inputs; {
-    nixosModules.default = import ./module.nix;
-    overlays.default = final: prev: {
-      ipwatch = prev.callPackage ./ipwatch.nix { };
-    };
+    overlays = import ./overlays.nix inputs;
+    nixosModules = import ./nixosModules.nix inputs;
   } //
+  flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" ] (system:
+    let pkgs = import nixpkgs { inherit system; overlays = [ self.overlays.default ]; }; in
+    {
+      packages.default = pkgs.ipwatch;
+      apps.default = flake-utils.lib.mkApp { drv = pkgs.ipwatch; name = "ipwatch"; };
+    }) //
   flake-utils.lib.eachDefaultSystem (system:
-    let
-      pkgs = import nixpkgs {
-        inherit system;
-        overlays = [ self.overlays.default ];
-      };
-    in
+    let pkgs = import nixpkgs { inherit system; }; in
     {
       devShells.default = pkgs.mkShell {
         CGO_ENABLED = 0;
         buildInputs = with pkgs; [ go-tools go ];
-      };
-      packages.default = pkgs.ipwatch;
-      apps.default = flake-utils.lib.mkApp {
-        drv = pkgs.ipwatch;
-        name = "ipwatch";
       };
     });
 }
