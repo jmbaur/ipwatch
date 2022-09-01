@@ -17,10 +17,10 @@
       apps.default = flake-utils.lib.mkApp { drv = pkgs.ipwatch; name = "ipwatch"; };
     }) //
   flake-utils.lib.eachDefaultSystem (system:
-    let pkgs = import nixpkgs { inherit system; }; in
+    let pkgs = import nixpkgs { inherit system; overlays = [ self.overlays.default ]; }; in
     {
       devShells.default = pkgs.mkShell {
-        CGO_ENABLED = 0;
+        inherit (pkgs.ipwatch) CGO_ENABLED;
         buildInputs = with pkgs; [ go-tools go ];
       };
     });
