@@ -101,7 +101,6 @@ func Logic(maxRetries int, ifaces []string, scripts []string) error {
 			}
 
 			if oldIP, ok := cache[ifaceName]; ok && oldIP.String() == newIP.String() {
-				fmt.Printf("New IP for %s has not changed, not calling scripts\n", ifaceName)
 				continue
 			}
 
