@@ -4,7 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"os"
+	"log"
 	"path/filepath"
 	"strings"
 
@@ -64,7 +64,6 @@ func logic() error {
 
 func main() {
 	if err := logic(); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		log.Fatal(err)
 	}
 }

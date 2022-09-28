@@ -7,8 +7,11 @@
   };
 
   outputs = inputs: with inputs; {
-    overlays.default = final: prev: { ipwatch = prev.callPackage ./. { }; };
-    nixosModules = import ./nixosModules.nix inputs;
+    overlays.default = _: prev: { ipwatch = prev.callPackage ./. { }; };
+    nixosModules.default = {
+      nixpkgs.overlays = [ self.overlays.default ];
+      imports = [ ./module.nix ];
+    };
   } // flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" ] (system:
     let
       pkgs = import nixpkgs {
