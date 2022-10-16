@@ -4,5 +4,5 @@ buildGoModule {
   version = "0.0.2";
   CGO_ENABLED = 0;
   src = ./.;
-  vendorSha256 = "sha256-gyozyeTSR2XshVwHO9oaRZ5VHD1aE44/VGMXzYWmJWE=";
+  vendorSha256 = "sha256-3c1mgws2KhFSHSbgpn+QmEOCt5aGgUklQtR5xTgWToE=";
 }
