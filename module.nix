@@ -7,6 +7,7 @@ with lib;
 {
   options.services.ipwatch = {
     enable = mkEnableOption "Enable ipwatch service";
+    package = mkPackageOption pkgs "ipwatch" { };
     scripts = mkOption {
       type = types.listOf types.path;
       description = ''
@@ -37,7 +38,7 @@ with lib;
         ProtectHome = true;
         ProtectSystem = true;
         EnvironmentFile = mkIf (cfg.environmentFile != null) cfg.environmentFile;
-        ExecStart = "${pkgs.ipwatch}/bin/ipwatch "
+        ExecStart = "${cfg.package}/bin/ipwatch "
           + lib.escapeShellArgs (
           lib.flatten (
             (map (iface: "-interface=${iface}") cfg.interfaces)
