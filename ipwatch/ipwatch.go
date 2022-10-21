@@ -1,4 +1,4 @@
-package internal
+package ipwatch
 
 import (
 	"bytes"
@@ -43,7 +43,7 @@ func getCache(ifaces []string) (map[string]net.IP, error) {
 	return cache, nil
 }
 
-func Logic(maxRetries int, ifaces []string, scripts []string) error {
+func Watch(maxRetries int, ifaces []string, scripts []string) error {
 	cache, err := getCache(ifaces)
 	if err != nil {
 		return err

@@ -8,6 +8,13 @@ with lib;
   options.services.ipwatch = {
     enable = mkEnableOption "Enable ipwatch service";
     package = mkPackageOption pkgs "ipwatch" { };
+    extraArgs = mkOption {
+      type = types.listOf types.str;
+      default = [ ];
+      description = ''
+        Extra arguments to be passed to ipwatch.
+      '';
+    };
     scripts = mkOption {
       type = types.listOf types.path;
       description = ''
@@ -38,13 +45,13 @@ with lib;
         ProtectHome = true;
         ProtectSystem = true;
         EnvironmentFile = mkIf (cfg.environmentFile != null) cfg.environmentFile;
-        ExecStart = "${cfg.package}/bin/ipwatch "
-          + lib.escapeShellArgs (
+        ExecStart = lib.escapeShellArgs ([ "${cfg.package}/bin/ipwatch" ] ++
           lib.flatten (
-            (map (iface: "-interface=${iface}") cfg.interfaces)
-              ++ (map (script: "-script=${script}") cfg.scripts)
-          )
+            (map (iface: "-interface=${iface}") cfg.interfaces) ++
+              (map (script: "-script=${script}") cfg.scripts)
+          ) ++ cfg.extraArgs
         );
+
       };
       wantedBy = [ "multi-user.target" ] ++ deps;
       wants = [ "network.target" ];

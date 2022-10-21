@@ -8,14 +8,21 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/jmbaur/ipwatch/internal"
+	"github.com/jmbaur/ipwatch/ipwatch"
 )
 
-var ErrNoScripts = errors.New("no scripts to run")
+var (
+	ErrNoScripts         = errors.New("no scripts to run")
+	ErrInvalidIpProtocol = errors.New("only one of -4 and -6 allowed")
+	ErrNotImplemented    = errors.New("not implemented")
+)
 
 func logic() error {
 	scripts := []string{}
 	ifaces := []string{}
+
+	ipv4Only := flag.Bool("4", false, "Watch only for IPv4 address changes")
+	ipv6Only := flag.Bool("6", false, "Watch only for IPv6 address changes")
 
 	maxRetries := flag.Int(
 		"max-retries",
@@ -40,6 +47,14 @@ func logic() error {
 	)
 	flag.Parse()
 
+	if *ipv4Only && *ipv6Only {
+		return ErrInvalidIpProtocol
+	}
+
+	if *ipv6Only {
+		return fmt.Errorf("ipv6: %w", ErrNotImplemented)
+	}
+
 	if len(scripts) == 0 {
 		return ErrNoScripts
 	}
@@ -55,7 +70,7 @@ func logic() error {
 		)
 	}
 
-	if err := internal.Logic(*maxRetries, ifaces, scripts); err != nil {
+	if err := ipwatch.Watch(*maxRetries, ifaces, scripts); err != nil {
 		return err
 	}
 
