@@ -190,6 +190,14 @@ func (w *Watcher) Watch() error {
 				continue
 			}
 
+			interested := len(w.interfaces) == 0
+			for _, i := range w.interfaces {
+				interested = i == iface.Name
+			}
+			if !interested {
+				continue
+			}
+
 			ad, err := netlink.NewAttributeDecoder(msg.Data[unix.SizeofIfAddrmsg:])
 			if err != nil {
 				continue
