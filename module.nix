@@ -48,9 +48,6 @@ with lib;
       enable = true;
       description = "ipwatch (https://github.com/jmbaur/ipwatch)";
       serviceConfig = {
-        DynamicUser = true;
-        ProtectHome = true;
-        ProtectSystem = true;
         EnvironmentFile = mkIf (cfg.environmentFile != null) cfg.environmentFile;
         ExecStart = lib.escapeShellArgs ([ "${cfg.package}/bin/ipwatch" ] ++
           lib.flatten (
@@ -60,6 +57,27 @@ with lib;
           ) ++ cfg.extraArgs
         );
 
+        CapabilityBoundingSet = [ ];
+        DeviceAllow = [ ];
+        DynamicUser = true;
+        LockPersonality = true;
+        MemoryDenyWriteExecute = true;
+        NoNewPrivileges = true;
+        PrivateDevices = true;
+        ProtectClock = true;
+        ProtectControlGroups = true;
+        ProtectHome = true;
+        ProtectHostname = true;
+        ProtectKernelLogs = true;
+        ProtectKernelModules = true;
+        ProtectKernelTunables = true;
+        ProtectSystem = "strict";
+        RemoveIPC = true;
+        RestrictAddressFamilies = [ "AF_NETLINK" "AF_INET" "AF_INET6" ];
+        RestrictNamespaces = true;
+        RestrictRealtime = true;
+        RestrictSUIDSGID = true;
+        SystemCallArchitectures = "native";
       };
       wantedBy = [ "multi-user.target" ] ++ deps;
       wants = [ "network.target" ];
