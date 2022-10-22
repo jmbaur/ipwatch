@@ -3,8 +3,8 @@ package ipwatch
 import (
 	"errors"
 	"fmt"
-	"log"
 	"math"
+	"net"
 	"net/netip"
 	"strings"
 	"sync"
@@ -169,9 +169,13 @@ func (w *Watcher) Watch() error {
 				continue
 			}
 
+			if len(msg.Data) < unix.SizeofIfAddrmsg {
+				continue
+			}
+
 			var (
-				ifaceIdx *int
-				newIP    *netip.Addr
+				iface *net.Interface
+				newIP *netip.Addr
 			)
 
 			// struct ifaddrmsg {
@@ -181,8 +185,10 @@ func (w *Watcher) Watch() error {
 			//     unsigned char ifa_scope;     /* Address scope */
 			//     unsigned int  ifa_index;     /* Interface index */
 			// };
-			idx := int(msg.Data[4])
-			ifaceIdx = &idx
+			iface, err = net.InterfaceByIndex(int(msg.Data[4]))
+			if err != nil {
+				continue
+			}
 
 			ad, err := netlink.NewAttributeDecoder(msg.Data[unix.SizeofIfAddrmsg:])
 			if err != nil {
@@ -190,7 +196,7 @@ func (w *Watcher) Watch() error {
 			}
 
 			for ad.Next() {
-				if ifaceIdx != nil && newIP != nil {
+				if newIP != nil {
 					break
 				}
 				switch ad.Type() {
@@ -211,8 +217,7 @@ func (w *Watcher) Watch() error {
 				}
 			}
 
-			if ifaceIdx == nil || newIP == nil {
-				log.Printf("don't have all the info we need; ifaceIdx: '%v', newIP: '%v'\n", ifaceIdx, newIP)
+			if newIP == nil {
 				continue messages
 			}
 
@@ -226,7 +231,7 @@ func (w *Watcher) Watch() error {
 					for i := 1; i <= int(w.maxRetries); i++ {
 						backoff := time.Duration(math.Pow(2, float64(i))) * time.Second
 
-						if hookOutput, err := hook.Run(*ifaceIdx, *newIP); err != nil {
+						if hookOutput, err := hook.Run(iface.Name, *newIP); err != nil {
 							outputs := []string{}
 							outputs = append(outputs, fmt.Sprintf("Hook '%s' failed", hook.Name()))
 							if len(hookOutput) > 0 {
