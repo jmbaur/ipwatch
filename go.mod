@@ -3,6 +3,7 @@ module github.com/jmbaur/ipwatch
 go 1.18
 
 require (
+	github.com/davecgh/go-spew v1.1.1
 	github.com/mdlayher/netlink v1.6.2
 	golang.org/x/sys v0.1.0
 )

@@ -26,6 +26,7 @@
           nativeBuildInputs;
       };
       packages.default = pkgs.ipwatch;
+      packages.test = pkgs.callPackage ./test.nix { inherit inputs; };
       apps.default = { type = "app"; program = "${pkgs.ipwatch}/bin/ipwatch"; };
     });
 }

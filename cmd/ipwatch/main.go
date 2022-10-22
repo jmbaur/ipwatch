@@ -21,10 +21,10 @@ func logic() error {
 	scripts := []string{}
 	ifaces := []string{}
 
-	ipv4Only := flag.Bool("4", false, "Watch only for IPv4 address changes")
-	ipv6Only := flag.Bool("6", false, "Watch only for IPv6 address changes")
+	doIPv4 := flag.Bool("4", false, "Watch only for IPv4 address changes")
+	doIPv6 := flag.Bool("6", false, "Watch only for IPv6 address changes")
 
-	maxRetries := flag.Int(
+	maxRetries := flag.Uint(
 		"max-retries",
 		3,
 		"The maximum number of attempts that will be made for a failing script",
@@ -47,12 +47,17 @@ func logic() error {
 	)
 	flag.Parse()
 
-	if *ipv4Only && *ipv6Only {
+	if *doIPv4 && *doIPv6 {
 		return ErrInvalidIpProtocol
 	}
 
-	if *ipv6Only {
-		return fmt.Errorf("ipv6: %w", ErrNotImplemented)
+	if *doIPv4 {
+		*doIPv6 = false
+	} else if *doIPv6 {
+		*doIPv4 = false
+	} else {
+		*doIPv4 = true
+		*doIPv6 = true
 	}
 
 	if len(scripts) == 0 {
@@ -61,20 +66,24 @@ func logic() error {
 
 	if len(ifaces) > 0 {
 		fmt.Printf(
-			"Listening for IPv4 address changes on %s\n",
+			"Listening for IP address changes on %s\n",
 			strings.Join(ifaces, ", "),
 		)
 	} else {
 		fmt.Println(
-			"Listening for IPv4 address changes on all interfaces",
+			"Listening for IP address changes on all interfaces",
 		)
 	}
 
-	if err := ipwatch.Watch(*maxRetries, ifaces, scripts); err != nil {
-		return err
+	cfg := &ipwatch.WatchConfig{
+		MaxRetries: *maxRetries,
+		Interfaces: ifaces,
+		Scripts:    scripts,
+		IPv4:       *doIPv4,
+		IPv6:       *doIPv6,
 	}
 
-	return nil
+	return cfg.Watch()
 }
 
 func main() {

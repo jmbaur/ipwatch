@@ -1,0 +1,3 @@
+{ nixosTest, ... }:
+nixosTest { }
+

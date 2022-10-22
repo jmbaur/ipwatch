@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
-	"net"
+	"net/netip"
 	"os"
 	"os/exec"
 	"strings"
@@ -15,42 +15,25 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func getCache(ifaces []string) (map[string]net.IP, error) {
-	cache := make(map[string]net.IP)
-
-	for _, iface := range ifaces {
-		ifi, err := net.InterfaceByName(iface)
-		if err != nil {
-			return nil, err
-		}
-		addrs, err := ifi.Addrs()
-		if err != nil {
-			return nil, err
-		}
-		for _, addr := range addrs {
-			ipnet, ok := addr.(*net.IPNet)
-			if !ok {
-				continue
-			}
-			v4Addr := ipnet.IP.To4()
-			if v4Addr == nil {
-				continue
-			}
-			cache[iface] = v4Addr
-		}
-	}
-
-	return cache, nil
+type WatchConfig struct {
+	MaxRetries uint
+	Interfaces []string
+	Scripts    []string
+	IPv4       bool
+	IPv6       bool
 }
 
-func Watch(maxRetries int, ifaces []string, scripts []string) error {
-	cache, err := getCache(ifaces)
-	if err != nil {
-		return err
+func (cfg *WatchConfig) Watch() error {
+	var groups uint32 = 0
+	if cfg.IPv4 {
+		groups |= unix.RTMGRP_IPV4_IFADDR
+	}
+	if cfg.IPv6 {
+		groups |= unix.RTMGRP_IPV6_IFADDR
 	}
 
 	conn, err := netlink.Dial(unix.NETLINK_ROUTE, &netlink.Config{
-		Groups: unix.RTMGRP_IPV4_IFADDR,
+		Groups: groups,
 		Strict: true,
 	})
 	if err != nil {
@@ -71,7 +54,7 @@ func Watch(maxRetries int, ifaces []string, scripts []string) error {
 			}
 
 			var ifaceName string
-			var newIP net.IP
+			var newIP netip.Addr
 
 			ad, err := netlink.NewAttributeDecoder(msg.Data[unix.SizeofIfAddrmsg:])
 			if err != nil {
@@ -83,15 +66,15 @@ func Watch(maxRetries int, ifaces []string, scripts []string) error {
 				switch ad.Type() {
 				case unix.IFA_ADDRESS:
 					ip := ad.Bytes()
-					if len(ip) != 4 {
-						fmt.Println("Did not get correct number of bytes")
-						continue
+					var ok bool
+					newIP, ok = netip.AddrFromSlice(ip)
+					if !ok {
+						continue messages
 					}
-					newIP = net.IPv4(ip[0], ip[1], ip[2], ip[3])
 				case unix.IFA_LABEL:
 					ifaceName = ad.String()
-					interested := len(ifaces) == 0
-					for _, iface := range ifaces {
+					interested := len(cfg.Interfaces) == 0
+					for _, iface := range cfg.Interfaces {
 						interested = ifaceName == iface
 					}
 					if !interested {
@@ -100,20 +83,14 @@ func Watch(maxRetries int, ifaces []string, scripts []string) error {
 				}
 			}
 
-			if oldIP, ok := cache[ifaceName]; ok && oldIP.String() == newIP.String() {
-				continue
-			}
-
-			cache[ifaceName] = newIP
-
 			var wg sync.WaitGroup
 			var l sync.Mutex
 
-			for _, script := range scripts {
+			for _, script := range cfg.Scripts {
 				wg.Add(1)
 				script := script
 				go func() {
-					for i := 1; i <= maxRetries; i++ {
+					for i := 1; i <= int(cfg.MaxRetries); i++ {
 						backoff := time.Duration(math.Pow(2, float64(i))) * time.Second
 
 						cmd := exec.Command(script)
@@ -129,7 +106,7 @@ func Watch(maxRetries int, ifaces []string, scripts []string) error {
 								outputs = append(outputs, string(trimmedOutput))
 							}
 							outputs = append(outputs, err.Error())
-							if i < maxRetries {
+							if i < int(cfg.MaxRetries) {
 								outputs = append(outputs, fmt.Sprintf("Retrying in %s", backoff))
 							} else {
 								outputs = append(outputs, "Max attempts reached")
