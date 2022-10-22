@@ -15,10 +15,10 @@ with lib;
         Extra arguments to be passed to ipwatch.
       '';
     };
-    scripts = mkOption {
-      type = types.listOf types.path;
+    hooks = mkOption {
+      type = types.listOf types.string;
       description = ''
-        Scripts to run after receiving a new IP address.
+        Hooks to run after receiving a new IP address.
       '';
     };
     interfaces = lib.mkOption {
@@ -32,13 +32,13 @@ with lib;
       type = types.listOf types.str;
       default = [ ];
       description = ''
-        Filters to apply on new IP addresses that will conditionally run scripts.
+        Filters to apply on new IP addresses that will conditionally run hooks.
       '';
     };
     environmentFile = lib.mkOption {
       type = types.nullOr types.path;
       description = ''
-        File to use to set the environment for scripts.
+        File to use to set the environment for hooks that need it.
       '';
     };
   };
@@ -46,7 +46,7 @@ with lib;
   config = mkIf cfg.enable {
     systemd.services.ipwatch = {
       enable = true;
-      description = "ipwatch";
+      description = "ipwatch (https://github.com/jmbaur/ipwatch)";
       serviceConfig = {
         DynamicUser = true;
         ProtectHome = true;
@@ -55,7 +55,7 @@ with lib;
         ExecStart = lib.escapeShellArgs ([ "${cfg.package}/bin/ipwatch" ] ++
           lib.flatten (
             (map (iface: "-interface=${iface}") cfg.interfaces) ++
-              (map (script: "-script=${script}") cfg.scripts) ++
+              (map (hook: "-hook=${hook}") cfg.hooks) ++
               (map (filter: "-filter=${filter}") cfg.filters)
           ) ++ cfg.extraArgs
         );
