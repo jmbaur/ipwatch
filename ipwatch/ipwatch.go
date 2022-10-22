@@ -2,6 +2,7 @@ package ipwatch
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"math"
 	"net/netip"
@@ -15,37 +16,147 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+var (
+	ErrNoScripts         = errors.New("no scripts to run")
+	ErrInvalidIpProtocol = errors.New("only one of -4 and -6 allowed")
+	ErrNotImplemented    = errors.New("not implemented")
+	ErrInvalidFilter     = errors.New("invalid filter")
+)
+
+var validFilters = map[string]struct{}{
+	"Is4":                       {},
+	"Is4In6":                    {},
+	"Is6":                       {},
+	"IsGlobalUnicast":           {},
+	"IsInterfaceLocalMulticast": {},
+	"IsLinkLocalMulticast":      {},
+	"IsLinkLocalUnicast":        {},
+	"IsLoopback":                {},
+	"IsMulticast":               {},
+	"IsPrivate":                 {},
+	"IsUnspecified":             {},
+	"IsValid":                   {},
+}
+
+func isValidFilter(filter string) bool {
+	test := filter
+	if strings.HasPrefix(filter, "!") {
+		test = filter[1:]
+	}
+	_, ok := validFilters[test]
+	return ok
+}
+
+func passesFilter(addr netip.Addr, filter string) bool {
+	var not bool
+	if strings.HasPrefix(filter, "!") {
+		not = true
+		filter = filter[1:]
+	}
+
+	var result bool
+	switch filter {
+	case "Is4":
+		result = addr.Is4()
+	case "Is4In6":
+		result = addr.Is4In6()
+	case "Is6":
+		result = addr.Is6()
+	case "IsGlobalUnicast":
+		result = addr.IsGlobalUnicast()
+	case "IsInterfaceLocalMulticast":
+		result = addr.IsInterfaceLocalMulticast()
+	case "IsLinkLocalMulticast":
+		result = addr.IsLinkLocalMulticast()
+	case "IsLinkLocalUnicast":
+		result = addr.IsLinkLocalUnicast()
+	case "IsLoopback":
+		result = addr.IsLoopback()
+	case "IsMulticast":
+		result = addr.IsMulticast()
+	case "IsPrivate":
+		result = addr.IsPrivate()
+	case "IsUnspecified":
+		result = addr.IsUnspecified()
+	case "IsValid":
+		result = addr.IsValid()
+	}
+
+	if not {
+		return !result
+	}
+
+	return result
+}
+
 type WatchConfig struct {
 	MaxRetries uint
 	Interfaces []string
 	Scripts    []string
 	IPv4       bool
 	IPv6       bool
+	Filters    []string
 }
 
-func (cfg *WatchConfig) Watch() error {
-	var groups uint32 = 0
-	if cfg.IPv4 {
-		groups |= unix.RTMGRP_IPV4_IFADDR
-	}
-	if cfg.IPv6 {
-		groups |= unix.RTMGRP_IPV6_IFADDR
+type Watcher struct {
+	interfaces []string
+	scripts    []string
+	filters    []string
+	maxRetries uint
+}
+
+func NewWatcher(cfg WatchConfig) (*Watcher, error) {
+	if cfg.IPv4 && cfg.IPv6 {
+		return nil, ErrInvalidIpProtocol
 	}
 
+	if cfg.IPv4 {
+		cfg.Filters = append(cfg.Filters, "Is4")
+	}
+	if cfg.IPv6 {
+		cfg.Filters = append(cfg.Filters, "Is6")
+	}
+
+	if len(cfg.Scripts) == 0 {
+		return nil, ErrNoScripts
+	}
+
+	filterMap := map[string]struct{}{}
+	for _, filter := range cfg.Filters {
+		if !isValidFilter(filter) {
+			return nil, fmt.Errorf("%w: %s", ErrInvalidFilter, filter)
+		} else {
+			filterMap[filter] = struct{}{}
+		}
+	}
+
+	filters := []string{}
+	for k := range filterMap {
+		filters = append(filters, k)
+	}
+
+	return &Watcher{
+		interfaces: cfg.Interfaces,
+		scripts:    cfg.Scripts,
+		filters:    filters,
+		maxRetries: cfg.MaxRetries,
+	}, nil
+}
+
+func (w *Watcher) Watch() error {
 	conn, err := netlink.Dial(unix.NETLINK_ROUTE, &netlink.Config{
-		Groups: groups,
+		Groups: unix.RTMGRP_IPV4_IFADDR | unix.RTMGRP_IPV6_IFADDR,
 		Strict: true,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to dial netlink: %v", err)
+		return fmt.Errorf("failed to dial netlink: %w", err)
 	}
 	defer conn.Close()
 
 	for {
 		msgs, err := conn.Receive()
 		if err != nil {
-			fmt.Printf("Failed to receive messages: %v", err)
-			break
+			return fmt.Errorf("failed to receive messages: %w", err)
 		}
 	messages:
 		for _, msg := range msgs {
@@ -58,7 +169,6 @@ func (cfg *WatchConfig) Watch() error {
 
 			ad, err := netlink.NewAttributeDecoder(msg.Data[unix.SizeofIfAddrmsg:])
 			if err != nil {
-				fmt.Printf("Could not get attribute decoder: %v", err)
 				continue
 			}
 
@@ -71,10 +181,15 @@ func (cfg *WatchConfig) Watch() error {
 					if !ok {
 						continue messages
 					}
+					for _, filter := range w.filters {
+						if !passesFilter(newIP, filter) {
+							continue messages
+						}
+					}
 				case unix.IFA_LABEL:
 					ifaceName = ad.String()
-					interested := len(cfg.Interfaces) == 0
-					for _, iface := range cfg.Interfaces {
+					interested := len(w.interfaces) == 0
+					for _, iface := range w.interfaces {
 						interested = ifaceName == iface
 					}
 					if !interested {
@@ -86,11 +201,11 @@ func (cfg *WatchConfig) Watch() error {
 			var wg sync.WaitGroup
 			var l sync.Mutex
 
-			for _, script := range cfg.Scripts {
+			for _, script := range w.scripts {
 				wg.Add(1)
 				script := script
 				go func() {
-					for i := 1; i <= int(cfg.MaxRetries); i++ {
+					for i := 1; i <= int(w.maxRetries); i++ {
 						backoff := time.Duration(math.Pow(2, float64(i))) * time.Second
 
 						cmd := exec.Command(script)
@@ -106,7 +221,7 @@ func (cfg *WatchConfig) Watch() error {
 								outputs = append(outputs, string(trimmedOutput))
 							}
 							outputs = append(outputs, err.Error())
-							if i < int(cfg.MaxRetries) {
+							if i < int(w.maxRetries) {
 								outputs = append(outputs, fmt.Sprintf("Retrying in %s", backoff))
 							} else {
 								outputs = append(outputs, "Max attempts reached")
@@ -140,8 +255,6 @@ func (cfg *WatchConfig) Watch() error {
 			wg.Wait()
 		}
 	}
-
-	return nil
 }
 
 func printOutput(outputs ...string) {

@@ -28,6 +28,13 @@ with lib;
         Interfaces to listen for changes on.
       '';
     };
+    filters = lib.mkOption {
+      type = types.listOf types.str;
+      default = [ ];
+      description = ''
+        Filters to apply on new IP addresses that will conditionally run scripts.
+      '';
+    };
     environmentFile = lib.mkOption {
       type = types.nullOr types.path;
       description = ''
@@ -48,7 +55,8 @@ with lib;
         ExecStart = lib.escapeShellArgs ([ "${cfg.package}/bin/ipwatch" ] ++
           lib.flatten (
             (map (iface: "-interface=${iface}") cfg.interfaces) ++
-              (map (script: "-script=${script}") cfg.scripts)
+              (map (script: "-script=${script}") cfg.scripts) ++
+              (map (filter: "-filter=${filter}") cfg.filters)
           ) ++ cfg.extraArgs
         );
 
