@@ -1,13 +1,11 @@
 package ipwatch
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
+	"log"
 	"math"
 	"net/netip"
-	"os"
-	"os/exec"
 	"strings"
 	"sync"
 	"time"
@@ -17,7 +15,6 @@ import (
 )
 
 var (
-	ErrNoScripts         = errors.New("no scripts to run")
 	ErrInvalidIpProtocol = errors.New("only one of -4 and -6 allowed")
 	ErrNotImplemented    = errors.New("not implemented")
 	ErrInvalidFilter     = errors.New("invalid filter")
@@ -92,7 +89,7 @@ func passesFilter(addr netip.Addr, filter string) bool {
 type WatchConfig struct {
 	MaxRetries uint
 	Interfaces []string
-	Scripts    []string
+	Hooks      []string
 	IPv4       bool
 	IPv6       bool
 	Filters    []string
@@ -100,7 +97,7 @@ type WatchConfig struct {
 
 type Watcher struct {
 	interfaces []string
-	scripts    []string
+	hooks      []Hook
 	filters    []string
 	maxRetries uint
 }
@@ -117,8 +114,16 @@ func NewWatcher(cfg WatchConfig) (*Watcher, error) {
 		cfg.Filters = append(cfg.Filters, "Is6")
 	}
 
-	if len(cfg.Scripts) == 0 {
-		return nil, ErrNoScripts
+	if len(cfg.Hooks) == 0 {
+		cfg.Hooks = append(cfg.Hooks, "internal:echo")
+	}
+	hooks := []Hook{}
+	for _, hookName := range cfg.Hooks {
+		hook, err := NewHook(hookName)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %s", err, hookName)
+		}
+		hooks = append(hooks, hook)
 	}
 
 	filterMap := map[string]struct{}{}
@@ -137,7 +142,7 @@ func NewWatcher(cfg WatchConfig) (*Watcher, error) {
 
 	return &Watcher{
 		interfaces: cfg.Interfaces,
-		scripts:    cfg.Scripts,
+		hooks:      hooks,
 		filters:    filters,
 		maxRetries: cfg.MaxRetries,
 	}, nil
@@ -164,8 +169,20 @@ func (w *Watcher) Watch() error {
 				continue
 			}
 
-			var ifaceName string
-			var newIP netip.Addr
+			var (
+				ifaceIdx *int
+				newIP    *netip.Addr
+			)
+
+			// struct ifaddrmsg {
+			//     unsigned char ifa_family;    /* Address type */
+			//     unsigned char ifa_prefixlen; /* Prefixlength of address */
+			//     unsigned char ifa_flags;     /* Address flags */
+			//     unsigned char ifa_scope;     /* Address scope */
+			//     unsigned int  ifa_index;     /* Interface index */
+			// };
+			idx := int(msg.Data[4])
+			ifaceIdx = &idx
 
 			ad, err := netlink.NewAttributeDecoder(msg.Data[unix.SizeofIfAddrmsg:])
 			if err != nil {
@@ -173,52 +190,47 @@ func (w *Watcher) Watch() error {
 			}
 
 			for ad.Next() {
+				if ifaceIdx != nil && newIP != nil {
+					break
+				}
 				switch ad.Type() {
 				case unix.IFA_ADDRESS:
-					ip := ad.Bytes()
-					var ok bool
-					newIP, ok = netip.AddrFromSlice(ip)
-					if !ok {
-						continue messages
-					}
-					for _, filter := range w.filters {
-						if !passesFilter(newIP, filter) {
+					{
+						ip := ad.Bytes()
+						addr, ok := netip.AddrFromSlice(ip)
+						if !ok {
 							continue messages
 						}
-					}
-				case unix.IFA_LABEL:
-					ifaceName = ad.String()
-					interested := len(w.interfaces) == 0
-					for _, iface := range w.interfaces {
-						interested = ifaceName == iface
-					}
-					if !interested {
-						continue messages
+						newIP = &addr
+						for _, filter := range w.filters {
+							if !passesFilter(*newIP, filter) {
+								continue messages
+							}
+						}
 					}
 				}
+			}
+
+			if ifaceIdx == nil || newIP == nil {
+				log.Printf("don't have all the info we need; ifaceIdx: '%v', newIP: '%v'\n", ifaceIdx, newIP)
+				continue messages
 			}
 
 			var wg sync.WaitGroup
 			var l sync.Mutex
 
-			for _, script := range w.scripts {
+			for _, hook := range w.hooks {
 				wg.Add(1)
-				script := script
+				hook := hook
 				go func() {
 					for i := 1; i <= int(w.maxRetries); i++ {
 						backoff := time.Duration(math.Pow(2, float64(i))) * time.Second
 
-						cmd := exec.Command(script)
-						cmd.Env = append(cmd.Env, os.Environ()...)
-						cmd.Env = append(cmd.Env, fmt.Sprintf("IFACE=%s", ifaceName))
-						cmd.Env = append(cmd.Env, fmt.Sprintf("ADDR=%s", newIP))
-
-						if output, err := cmd.CombinedOutput(); err != nil {
+						if hookOutput, err := hook.Run(*ifaceIdx, *newIP); err != nil {
 							outputs := []string{}
-							outputs = append(outputs, fmt.Sprintf("Error running script %s", script))
-							trimmedOutput := bytes.TrimSpace(output)
-							if len(trimmedOutput) > 0 {
-								outputs = append(outputs, string(trimmedOutput))
+							outputs = append(outputs, fmt.Sprintf("Hook '%s' failed", hook.Name()))
+							if len(hookOutput) > 0 {
+								outputs = append(outputs, hookOutput)
 							}
 							outputs = append(outputs, err.Error())
 							if i < int(w.maxRetries) {
@@ -235,10 +247,9 @@ func (w *Watcher) Watch() error {
 							continue
 						} else {
 							outputs := []string{}
-							outputs = append(outputs, fmt.Sprintf("Script %s succeeded", script))
-							trimmedOutput := bytes.TrimSpace(output)
-							if len(trimmedOutput) > 0 {
-								outputs = append(outputs, string(trimmedOutput))
+							outputs = append(outputs, fmt.Sprintf("Hook '%s' succeeded", hook.Name()))
+							if len(hookOutput) > 0 {
+								outputs = append(outputs, hookOutput)
 							}
 
 							l.Lock()

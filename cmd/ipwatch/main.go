@@ -11,7 +11,7 @@ import (
 )
 
 func logic() error {
-	scripts := []string{}
+	hooks := []string{}
 	ifaces := []string{}
 	filters := []string{}
 
@@ -32,10 +32,10 @@ func logic() error {
 		})
 
 	flag.Func(
-		"script",
-		"The path to an executable/script to run on IP address change.",
+		"hook",
+		"A hook to run upon receiving a new IP address.",
 		func(script string) error {
-			scripts = append(scripts, filepath.Join(script))
+			hooks = append(hooks, filepath.Join(script))
 			return nil
 		},
 	)
@@ -63,7 +63,7 @@ func logic() error {
 	if watcher, err := ipwatch.NewWatcher(ipwatch.WatchConfig{
 		MaxRetries: *maxRetries,
 		Interfaces: ifaces,
-		Scripts:    scripts,
+		Hooks:      hooks,
 		IPv4:       *doIPv4,
 		IPv6:       *doIPv6,
 		Filters:    filters,

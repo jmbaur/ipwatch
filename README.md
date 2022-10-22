@@ -1,8 +1,9 @@
 # IPWatch
 
-Runs a script on IP address changes for a given network interface(s).
+Run hooks (code, executables, etc.) on changes to IP addresses.
 
-A common use case for this is for dynamically updating DNS records (e.g.
-Cloudflare). This program will pass down its environment into the spawned
-executable so that any secrets needed for updating external services can be
-present.
+## Usage
+
+```console
+$ ipwatch [-4] [-6] [-hook=HOOK ...] [-filter=FILTER ...] [-interface=IFACE ...] [-max-retries=NUM]
+```
