@@ -37,6 +37,24 @@ var validFilters = map[string]struct{}{
 	"IsValid":                   {},
 }
 
+func printOutput(outputs ...string) {
+	var largest int
+	for _, output := range outputs {
+		for _, line := range strings.Split(output, "\n") {
+			if len(line) > largest {
+				largest = len(line)
+			}
+		}
+	}
+
+	separator := strings.Repeat("-", largest)
+	fmt.Println(separator)
+	for _, output := range outputs {
+		fmt.Println(output)
+	}
+	fmt.Println(separator)
+}
+
 func isValidFilter(filter string) bool {
 	test := filter
 	if strings.HasPrefix(filter, "!") {
@@ -46,46 +64,51 @@ func isValidFilter(filter string) bool {
 	return ok
 }
 
-func passesFilter(addr netip.Addr, filter string) bool {
-	var not bool
-	if strings.HasPrefix(filter, "!") {
-		not = true
-		filter = filter[1:]
+func passesFilter(addr netip.Addr, filters ...string) bool {
+	for _, filter := range filters {
+		var not, result bool
+
+		if strings.HasPrefix(filter, "!") {
+			not = true
+			filter = filter[1:]
+		}
+		switch filter {
+		case "Is4":
+			result = addr.Is4()
+		case "Is4In6":
+			result = addr.Is4In6()
+		case "Is6":
+			result = addr.Is6()
+		case "IsGlobalUnicast":
+			result = addr.IsGlobalUnicast()
+		case "IsInterfaceLocalMulticast":
+			result = addr.IsInterfaceLocalMulticast()
+		case "IsLinkLocalMulticast":
+			result = addr.IsLinkLocalMulticast()
+		case "IsLinkLocalUnicast":
+			result = addr.IsLinkLocalUnicast()
+		case "IsLoopback":
+			result = addr.IsLoopback()
+		case "IsMulticast":
+			result = addr.IsMulticast()
+		case "IsPrivate":
+			result = addr.IsPrivate()
+		case "IsUnspecified":
+			result = addr.IsUnspecified()
+		case "IsValid":
+			result = addr.IsValid()
+		}
+
+		if not {
+			result = !result
+		}
+
+		if !result {
+			return false
+		}
 	}
 
-	var result bool
-	switch filter {
-	case "Is4":
-		result = addr.Is4()
-	case "Is4In6":
-		result = addr.Is4In6()
-	case "Is6":
-		result = addr.Is6()
-	case "IsGlobalUnicast":
-		result = addr.IsGlobalUnicast()
-	case "IsInterfaceLocalMulticast":
-		result = addr.IsInterfaceLocalMulticast()
-	case "IsLinkLocalMulticast":
-		result = addr.IsLinkLocalMulticast()
-	case "IsLinkLocalUnicast":
-		result = addr.IsLinkLocalUnicast()
-	case "IsLoopback":
-		result = addr.IsLoopback()
-	case "IsMulticast":
-		result = addr.IsMulticast()
-	case "IsPrivate":
-		result = addr.IsPrivate()
-	case "IsUnspecified":
-		result = addr.IsUnspecified()
-	case "IsValid":
-		result = addr.IsValid()
-	}
-
-	if not {
-		return !result
-	}
-
-	return result
+	return true
 }
 
 type WatchConfig struct {
@@ -276,17 +299,14 @@ func (w *Watcher) handleNewAddr(msg netlink.Message) error {
 					return nil
 				}
 
-				w.log.Println("Caching new address")
-				w.l.Lock()
-				w.ips[addr] = struct{}{}
-				w.l.Unlock()
 				newIP = &addr
-				for _, filter := range w.filters {
-					if !passesFilter(*newIP, filter) {
-						w.log.Println("Address does not pass filter, skipping hooks")
-						return nil
-					}
+				if !passesFilter(*newIP, w.filters...) {
+					w.log.Println("Address does not pass filters, skipping hooks")
+					return nil
 				}
+
+				w.log.Println("Caching new address")
+				w.cacheAddr(addr)
 			}
 		}
 	}
@@ -348,7 +368,50 @@ func (w *Watcher) handleNewAddr(msg netlink.Message) error {
 	return nil
 }
 
+func (w *Watcher) cacheAddr(addr netip.Addr) {
+	w.l.Lock()
+	w.ips[addr] = struct{}{}
+	defer w.l.Unlock()
+}
+
 func (w *Watcher) Watch() error {
+	w.log.Println("Opening netlink socket")
+	conn, err := netlink.Dial(unix.NETLINK_ROUTE, &netlink.Config{
+		Groups: unix.RTMGRP_IPV4_IFADDR | unix.RTMGRP_IPV6_IFADDR,
+		Strict: true,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to dial netlink: %w", err)
+	}
+	defer conn.Close()
+
+	w.log.Println("Caching initial IPs")
+	if len(w.interfaces) > 0 {
+		for _, name := range w.interfaces {
+			if iface, err := net.InterfaceByName(name); err == nil {
+				if addrs, err := iface.Addrs(); err == nil {
+					for _, addr := range addrs {
+						ip := netip.MustParseAddr(addr.(*net.IPNet).IP.String())
+						if passesFilter(ip, w.filters...) {
+							w.log.Println(ip)
+							w.cacheAddr(ip)
+						}
+					}
+				}
+			}
+		}
+	} else {
+		if addrs, err := net.InterfaceAddrs(); err == nil {
+			for _, addr := range addrs {
+				ip := netip.MustParseAddr(addr.(*net.IPNet).IP.String())
+				if passesFilter(ip, w.filters...) {
+					w.log.Println(ip)
+					w.cacheAddr(ip)
+				}
+			}
+		}
+	}
+
 	if len(w.interfaces) > 0 {
 		w.log.Printf(
 			"Listening for IP address changes on %s\n",
@@ -359,16 +422,6 @@ func (w *Watcher) Watch() error {
 			"Listening for IP address changes on all interfaces",
 		)
 	}
-
-	w.log.Println("Opening netlink socket")
-	conn, err := netlink.Dial(unix.NETLINK_ROUTE, &netlink.Config{
-		Groups: unix.RTMGRP_IPV4_IFADDR | unix.RTMGRP_IPV6_IFADDR,
-		Strict: true,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to dial netlink: %w", err)
-	}
-	defer conn.Close()
 
 	for {
 		msgs, err := conn.Receive()
@@ -392,22 +445,4 @@ func (w *Watcher) Watch() error {
 			}
 		}
 	}
-}
-
-func printOutput(outputs ...string) {
-	var largest int
-	for _, output := range outputs {
-		for _, line := range strings.Split(output, "\n") {
-			if len(line) > largest {
-				largest = len(line)
-			}
-		}
-	}
-
-	separator := strings.Repeat("-", largest)
-	fmt.Println(separator)
-	for _, output := range outputs {
-		fmt.Println(output)
-	}
-	fmt.Println(separator)
 }
