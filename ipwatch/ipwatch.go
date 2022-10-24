@@ -267,6 +267,7 @@ func (w *Watcher) handleNewAddr(msg netlink.Message) error {
 				ip := ad.Bytes()
 				addr, ok := netip.AddrFromSlice(ip)
 				if !ok {
+					w.log.Println("Address not of length 4 or 16")
 					return nil
 				}
 
@@ -282,6 +283,7 @@ func (w *Watcher) handleNewAddr(msg netlink.Message) error {
 				newIP = &addr
 				for _, filter := range w.filters {
 					if !passesFilter(*newIP, filter) {
+						w.log.Println("Address does not pass filter, skipping hooks")
 						return nil
 					}
 				}
@@ -290,6 +292,7 @@ func (w *Watcher) handleNewAddr(msg netlink.Message) error {
 	}
 
 	if newIP == nil {
+		w.log.Println("No address found, skipping hooks")
 		return nil
 	}
 
