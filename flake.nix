@@ -2,8 +2,10 @@
   description = "Run code on changes to network interfaces";
 
   inputs = {
-    nixpkgs.url = "nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
+    nixpkgs.url = "nixpkgs/nixos-unstable";
+    pre-commit-hooks.inputs.nixpkgs.follows = "nixpkgs";
+    pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
   };
 
   outputs = inputs: with inputs; {
@@ -18,10 +20,23 @@
         inherit system;
         overlays = [ self.overlays.default ];
       };
+      preCommitCheck = pre-commit-hooks.lib.${system}.run {
+        src = ./.;
+        hooks = {
+          nixpkgs-fmt.enable = true;
+          govet.enable = true;
+          gofmt = {
+            enable = true;
+            entry = "${pkgs.ipwatch.go}/bin/gofmt -w";
+            types = [ "go" ];
+          };
+        };
+      };
     in
     {
       devShells.default = pkgs.mkShell {
         buildInputs = [ pkgs.just ];
+        inherit (preCommitCheck) shellHook;
         inherit (pkgs.ipwatch)
           CGO_ENABLED
           nativeBuildInputs;
