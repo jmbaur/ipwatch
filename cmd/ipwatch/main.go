@@ -2,10 +2,8 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"log"
 	"path/filepath"
-	"strings"
 
 	"github.com/jmbaur/ipwatch/ipwatch"
 )
@@ -14,6 +12,8 @@ func logic() error {
 	hooks := []string{}
 	ifaces := []string{}
 	filters := []string{}
+
+	debug := flag.Bool("debug", false, "Run in debug mode")
 
 	maxRetries := flag.Uint(
 		"max-retries",
@@ -49,18 +49,8 @@ func logic() error {
 	)
 	flag.Parse()
 
-	if len(ifaces) > 0 {
-		fmt.Printf(
-			"Listening for IP address changes on %s\n",
-			strings.Join(ifaces, ", "),
-		)
-	} else {
-		fmt.Println(
-			"Listening for IP address changes on all interfaces",
-		)
-	}
-
 	if watcher, err := ipwatch.NewWatcher(ipwatch.WatchConfig{
+		Debug:      *debug,
 		MaxRetries: *maxRetries,
 		Interfaces: ifaces,
 		Hooks:      hooks,

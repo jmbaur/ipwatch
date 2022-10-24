@@ -21,6 +21,7 @@
     in
     {
       devShells.default = pkgs.mkShell {
+        buildInputs = [ pkgs.just ];
         inherit (pkgs.ipwatch)
           CGO_ENABLED
           nativeBuildInputs;
