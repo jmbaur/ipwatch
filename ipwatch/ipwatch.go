@@ -128,8 +128,8 @@ type Watcher struct {
 	filters    []string
 	maxRetries uint
 
-	l   sync.Mutex
-	ips map[netip.Addr]struct{}
+	l       sync.Mutex
+	ipCache map[int]map[netip.Addr]struct{}
 }
 
 func NewWatcher(cfg WatchConfig) (*Watcher, error) {
@@ -183,7 +183,7 @@ func NewWatcher(cfg WatchConfig) (*Watcher, error) {
 		hooks:      hooks,
 		filters:    filters,
 		maxRetries: cfg.MaxRetries,
-		ips:        map[netip.Addr]struct{}{},
+		ipCache:    map[int]map[netip.Addr]struct{}{},
 	}, nil
 }
 
@@ -214,17 +214,8 @@ func (w *Watcher) handleDelAddr(msg netlink.Message) error {
 		return err
 	}
 
-	iface, err := net.InterfaceByIndex(int(ifaddrmsg.Index))
-	if err != nil {
-		return err
-	}
-
-	interested := len(w.interfaces) == 0
-	for _, i := range w.interfaces {
-		interested = i == iface.Name
-	}
-	if !interested {
-		w.log.Println("Not interested in deleted address")
+	if _, ok := w.ipCache[int(ifaddrmsg.Index)]; !ok {
+		w.log.Println("Not interested in added address")
 		return nil
 	}
 
@@ -244,7 +235,9 @@ func (w *Watcher) handleDelAddr(msg netlink.Message) error {
 				}
 				w.log.Println("Deleting address from cache")
 				w.l.Lock()
-				delete(w.ips, addr)
+				if _, ok := w.ipCache[int(ifaddrmsg.Index)]; ok {
+					delete(w.ipCache[int(ifaddrmsg.Index)], addr)
+				}
 				w.l.Unlock()
 			}
 		}
@@ -261,16 +254,7 @@ func (w *Watcher) handleNewAddr(msg netlink.Message) error {
 		return err
 	}
 
-	iface, err := net.InterfaceByIndex(int(ifaddrmsg.Index))
-	if err != nil {
-		return err
-	}
-
-	interested := len(w.interfaces) == 0
-	for _, i := range w.interfaces {
-		interested = i == iface.Name
-	}
-	if !interested {
+	if _, ok := w.ipCache[int(ifaddrmsg.Index)]; !ok {
 		w.log.Println("Not interested in added address")
 		return nil
 	}
@@ -294,9 +278,11 @@ func (w *Watcher) handleNewAddr(msg netlink.Message) error {
 					return nil
 				}
 
-				if _, ok := w.ips[addr]; ok {
-					w.log.Println("New addr was found in cache, skipping hooks")
-					return nil
+				if cachedIface, ok := w.ipCache[int(ifaddrmsg.Index)]; ok {
+					if _, ok := cachedIface[addr]; ok {
+						w.log.Println("New addr was found in cache, skipping hooks")
+						return nil
+					}
 				}
 
 				newIP = &addr
@@ -306,7 +292,7 @@ func (w *Watcher) handleNewAddr(msg netlink.Message) error {
 				}
 
 				w.log.Println("Caching new address")
-				w.cacheAddr(addr)
+				w.cacheAddr(int(ifaddrmsg.Index), addr)
 			}
 		}
 	}
@@ -326,7 +312,7 @@ func (w *Watcher) handleNewAddr(msg netlink.Message) error {
 			for i := 1; i <= int(w.maxRetries); i++ {
 				backoff := time.Duration(math.Pow(2, float64(i))) * time.Second
 
-				if hookOutput, err := hook.Run(iface.Name, *newIP); err != nil {
+				if hookOutput, err := hook.Run(ifaddrmsg.Index, *newIP); err != nil {
 					outputs := []string{}
 					outputs = append(outputs, fmt.Sprintf("Hook '%s' failed", hook.Name()))
 					if len(hookOutput) > 0 {
@@ -368,9 +354,12 @@ func (w *Watcher) handleNewAddr(msg netlink.Message) error {
 	return nil
 }
 
-func (w *Watcher) cacheAddr(addr netip.Addr) {
+func (w *Watcher) cacheAddr(iface int, addr netip.Addr) {
 	w.l.Lock()
-	w.ips[addr] = struct{}{}
+	if _, ok := w.ipCache[iface]; !ok {
+		w.ipCache[iface] = map[netip.Addr]struct{}{}
+	}
+	w.ipCache[iface][addr] = struct{}{}
 	defer w.l.Unlock()
 }
 
@@ -386,27 +375,27 @@ func (w *Watcher) Watch() error {
 	defer conn.Close()
 
 	w.log.Println("Caching initial IPs")
+	var interestedInterfaces []net.Interface
 	if len(w.interfaces) > 0 {
 		for _, name := range w.interfaces {
 			if iface, err := net.InterfaceByName(name); err == nil {
-				if addrs, err := iface.Addrs(); err == nil {
-					for _, addr := range addrs {
-						ip := netip.MustParseAddr(addr.(*net.IPNet).IP.String())
-						if passesFilter(ip, w.filters...) {
-							w.log.Println(ip)
-							w.cacheAddr(ip)
-						}
-					}
-				}
+				interestedInterfaces = append(interestedInterfaces, *iface)
 			}
 		}
 	} else {
-		if addrs, err := net.InterfaceAddrs(); err == nil {
+		interestedInterfaces, err = net.Interfaces()
+		if err != nil {
+			return err
+		}
+	}
+
+	for _, iface := range interestedInterfaces {
+		if addrs, err := iface.Addrs(); err == nil {
 			for _, addr := range addrs {
 				ip := netip.MustParseAddr(addr.(*net.IPNet).IP.String())
 				if passesFilter(ip, w.filters...) {
-					w.log.Println(ip)
-					w.cacheAddr(ip)
+					w.log.Println(iface.Name, ip)
+					w.cacheAddr(iface.Index, ip)
 				}
 			}
 		}

@@ -3,3 +3,7 @@ run:
 
 build:
 	go build -o $out/ipwatch ./cmd/ipwatch
+
+check:
+	go test ./...
+	staticcheck ./...

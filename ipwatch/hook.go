@@ -15,7 +15,7 @@ var ErrInvalidHook = errors.New("invalid hook")
 type Hook interface {
 	Name() string
 	// Run returns an output string and an error
-	Run(iface string, addr netip.Addr) (string, error)
+	Run(ifaceIdx uint32, addr netip.Addr) (string, error)
 }
 
 func NewHook(hook string) (Hook, error) {
@@ -44,8 +44,8 @@ func (e *Echo) Name() string {
 	return "internal:echo"
 }
 
-func (e *Echo) Run(iface string, addr netip.Addr) (string, error) {
-	return fmt.Sprintf("New IP for %s: %s", iface, addr), nil
+func (e *Echo) Run(ifaceIdx uint32, addr netip.Addr) (string, error) {
+	return fmt.Sprintf("New IP for %d: %s", ifaceIdx, addr), nil
 }
 
 type Executable struct {
@@ -57,10 +57,10 @@ func (e *Executable) Name() string {
 	return fmt.Sprintf("executable:%s", e.ExeName)
 }
 
-func (e *Executable) Run(iface string, addr netip.Addr) (string, error) {
+func (e *Executable) Run(ifaceIdx uint32, addr netip.Addr) (string, error) {
 	cmd := exec.Command(e.ExeName)
 	cmd.Env = append(cmd.Env, os.Environ()...)
-	cmd.Env = append(cmd.Env, fmt.Sprintf("IFACE=%s", iface))
+	cmd.Env = append(cmd.Env, fmt.Sprintf("IFACE_IDX=%d", ifaceIdx))
 	cmd.Env = append(cmd.Env, fmt.Sprintf("ADDR=%s", addr))
 
 	output, err := cmd.CombinedOutput()
