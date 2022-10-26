@@ -35,7 +35,7 @@
     in
     {
       devShells.default = pkgs.mkShell {
-        buildInputs = with pkgs; [ just go-tools ];
+        buildInputs = with pkgs; [ just go-tools nix-prefetch ];
         inherit (preCommitCheck) shellHook;
         inherit (pkgs.ipwatch)
           CGO_ENABLED
