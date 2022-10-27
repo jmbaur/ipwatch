@@ -1,3 +1,6 @@
+help:
+	@just --list
+
 build:
 	go build -o $out/ipwatch ./cmd/ipwatch
 
