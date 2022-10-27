@@ -34,7 +34,7 @@
       };
     in
     {
-      devShells.default = self.devShells.${system}.overrideAttrs (old: {
+      devShells.default = self.devShells.${system}.ci.overrideAttrs (old: {
         inherit (preCommitCheck) shellHook;
       });
       devShells.ci = pkgs.mkShell {
