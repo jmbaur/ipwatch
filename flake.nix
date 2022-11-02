@@ -41,7 +41,10 @@
           nativeBuildInputs;
       };
     });
-    packages = forAllSystems ({ pkgs, ... }: { default = pkgs.ipwatch; });
+    packages = forAllSystems ({ pkgs, ... }: {
+      default = pkgs.ipwatch;
+      test = pkgs.callPackage ./test.nix { module = self.nixosModules.default; };
+    });
     apps = forAllSystems ({ pkgs, ... }: {
       default = { type = "app"; program = "${pkgs.ipwatch}/bin/ipwatch"; };
     });

@@ -17,6 +17,7 @@ with lib;
     };
     hooks = mkOption {
       type = types.listOf types.string;
+      default = [ "internal:echo" ];
       description = ''
         Hooks to run after receiving a new IP address.
       '';
@@ -37,6 +38,7 @@ with lib;
     };
     environmentFile = lib.mkOption {
       type = types.nullOr types.path;
+      default = null;
       description = ''
         File to use to set the environment for hooks that need it.
       '';
