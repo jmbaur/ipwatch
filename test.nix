@@ -13,9 +13,12 @@ nixosTest {
       ];
       hooks = [ "internal:echo" ];
     };
+    networking.dhcpcd.denyInterfaces = [ "dummy0" ];
   };
 
   testScript = ''
+    start_all()
+
     with subtest("manual"):
         machine.succeed("ip link add dummy0 type dummy")
         machine.succeed("ip addr add 10.0.0.1/24 dev dummy0")
@@ -29,11 +32,8 @@ nixosTest {
         machine.succeed("ip link del dummy0")
 
     with subtest("dhcp"):
-        machine.succeed("true") # TODO(jared): don't skip this test
-        # print(machine.succeed("ip addr"))
-        # machine.systemctl("reload dhcpcd.service")
-        # print(machine.succeed("ip addr"))
-        # machine.wait_for_console_text("eth0: rebinding lease")
-        # machine.wait_for_console_text("New addr was found in cache, skipping hooks")
+        machine.systemctl("reload dhcpcd.service")
+        machine.wait_for_console_text("eth0: rebinding lease")
+        machine.wait_for_console_text("New addr was found in cache, skipping hooks")
   '';
 }
