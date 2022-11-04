@@ -35,8 +35,8 @@ nixosTest {
     machine.wait_for_console_text("New IP for 4: 10.0.0.2")
 
     # dhcp
-    machine.succeed("dhcpcd --rebind eth0")
-    machine.wait_for_console_text("eth0: rebinding lease")
+    machine.systemctl("reload dhcpcd.service")
+    machine.wait_for_console_text("eth0:\ rebinding")
     machine.wait_for_console_text("New addr was found in cache, skipping hooks")
   '';
 }

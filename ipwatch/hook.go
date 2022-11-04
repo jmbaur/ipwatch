@@ -10,14 +10,17 @@ import (
 	"strings"
 )
 
+// ErrInvalidHook indicates that the hook type is not supported.
 var ErrInvalidHook = errors.New("invalid hook")
 
+// Hook is the interface required for running an arbitrary step after an IP
+// address change.
 type Hook interface {
 	Name() string
-	// Run returns an output string and an error
 	Run(ifaceIdx uint32, addr netip.Addr) (string, error)
 }
 
+// NewHook returns a hook, parsing the hook format '<hook name>:<hook value>'.
 func NewHook(hook string) (Hook, error) {
 	split := strings.SplitN(hook, ":", 2)
 	if len(split) != 2 {
@@ -38,25 +41,34 @@ func NewHook(hook string) (Hook, error) {
 	return nil, ErrInvalidHook
 }
 
+// Echo is a hook that simply prints new IP address information to the screen.
+// To use Echo, provide the hook with the format 'internal:echo'.
 type Echo struct{}
 
+// Name implements Hook
 func (e *Echo) Name() string {
 	return "internal:echo"
 }
 
+// Run implements Hook
 func (e *Echo) Run(ifaceIdx uint32, addr netip.Addr) (string, error) {
 	return fmt.Sprintf("New IP for %d: %s", ifaceIdx, addr), nil
 }
 
+// Executable is a hook that can run an arbitrary executable after an IP
+// address change. To use this hook, provide the hook format 'executable:<path
+// to executable>'.
 type Executable struct {
 	// The name or full path to an executable
 	ExeName string
 }
 
+// Name implements Hook
 func (e *Executable) Name() string {
 	return fmt.Sprintf("executable:%s", e.ExeName)
 }
 
+// Run implements Hook
 func (e *Executable) Run(ifaceIdx uint32, addr netip.Addr) (string, error) {
 	cmd := exec.Command(e.ExeName)
 	cmd.Env = append(cmd.Env, os.Environ()...)

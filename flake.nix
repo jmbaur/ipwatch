@@ -26,6 +26,7 @@
           hooks = {
             nixpkgs-fmt.enable = true;
             govet.enable = true;
+            revive.enable = true;
             gofmt = {
               enable = true;
               entry = "${pkgs.ipwatch.go}/bin/gofmt -w";
@@ -36,9 +37,7 @@
       });
       ci = pkgs.mkShell {
         buildInputs = with pkgs; [ just go-tools nix-prefetch ];
-        inherit (pkgs.ipwatch)
-          CGO_ENABLED
-          nativeBuildInputs;
+        inherit (pkgs.ipwatch) CGO_ENABLED nativeBuildInputs;
       };
     });
     packages = forAllSystems ({ pkgs, ... }: {

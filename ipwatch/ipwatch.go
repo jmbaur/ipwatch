@@ -1,3 +1,5 @@
+// Package ipwatch implements everything needed for watching and acting on IP
+// address changes to network interfaces.
 package ipwatch
 
 import (
@@ -6,20 +8,23 @@ import (
 	"io"
 	"log"
 	"math"
-	"net"
 	"net/netip"
 	"strings"
 	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/mdlayher/netlink"
 	"golang.org/x/sys/unix"
 )
 
 var (
-	ErrInvalidIpProtocol = errors.New("only one of -4 and -6 allowed")
-	ErrInvalidFilter     = errors.New("invalid filter")
-	ErrIncorrectSizeOf   = errors.New("incorrect size of")
+	// ErrIncorrectSizeOf indicates the incorrect size was present
+	ErrIncorrectSizeOf = errors.New("incorrect size of")
+	// ErrInvalidFilter indicates that the filter is not supported
+	ErrInvalidFilter = errors.New("invalid filter")
+	// ErrInvalidIPProtocol indicates that the IP protocol is not supported
+	ErrInvalidIPProtocol = errors.New("only one of -4 and -6 allowed")
 )
 
 var validFilters = map[string]struct{}{
@@ -111,6 +116,7 @@ func passesFilter(addr netip.Addr, filters ...string) bool {
 	return true
 }
 
+// WatchConfig is used to create a watcher
 type WatchConfig struct {
 	Debug      bool
 	MaxRetries uint
@@ -121,6 +127,8 @@ type WatchConfig struct {
 	Filters    []string
 }
 
+// Watcher can be used to watch changes to IP addresses, optionally filtering
+// on interface and/or IP address types.
 type Watcher struct {
 	log        *log.Logger
 	interfaces []string
@@ -132,9 +140,10 @@ type Watcher struct {
 	ipCache map[int]map[netip.Addr]struct{}
 }
 
+// NewWatcher parses a WatchConfig and returns a new Watcher.
 func NewWatcher(cfg WatchConfig) (*Watcher, error) {
 	if cfg.IPv4 && cfg.IPv6 {
-		return nil, ErrInvalidIpProtocol
+		return nil, ErrInvalidIPProtocol
 	}
 
 	if cfg.IPv4 {
@@ -160,9 +169,8 @@ func NewWatcher(cfg WatchConfig) (*Watcher, error) {
 	for _, filter := range cfg.Filters {
 		if !isValidFilter(filter) {
 			return nil, fmt.Errorf("%w: %s", ErrInvalidFilter, filter)
-		} else {
-			filterMap[filter] = struct{}{}
 		}
+		filterMap[filter] = struct{}{}
 	}
 
 	filters := []string{}
@@ -187,28 +195,25 @@ func NewWatcher(cfg WatchConfig) (*Watcher, error) {
 	}, nil
 }
 
+func getIfInfomsg(ifinfomsg []byte) (*unix.IfInfomsg, error) {
+	if len(ifinfomsg) < unix.SizeofIfInfomsg {
+		return nil, fmt.Errorf("%w: %s", ErrIncorrectSizeOf, "ifinfomsg")
+	}
+
+	return (*unix.IfInfomsg)(unsafe.Pointer(&ifinfomsg[0:unix.SizeofIfInfomsg][0])), nil
+}
+
 func getIfAddrmsg(ifaddrmsg []byte) (*unix.IfAddrmsg, error) {
 	if len(ifaddrmsg) < unix.SizeofIfAddrmsg {
 		return nil, fmt.Errorf("%w: %s", ErrIncorrectSizeOf, "ifaddrmsg")
 	}
 
-	// struct ifaddrmsg {
-	//     unsigned char ifa_family;    /* Address type */
-	//     unsigned char ifa_prefixlen; /* Prefixlength of address */
-	//     unsigned char ifa_flags;     /* Address flags */
-	//     unsigned char ifa_scope;     /* Address scope */
-	//     unsigned int  ifa_index;     /* Interface index */
-	// };
-	return &unix.IfAddrmsg{
-		Family:    uint8(ifaddrmsg[0]),
-		Prefixlen: uint8(ifaddrmsg[1]),
-		Flags:     uint8(ifaddrmsg[2]),
-		Scope:     uint8(ifaddrmsg[3]),
-		Index:     uint32(ifaddrmsg[4]),
-	}, nil
+	return (*unix.IfAddrmsg)(unsafe.Pointer(&ifaddrmsg[0:unix.SizeofIfAddrmsg][0])), nil
 }
 
 func (w *Watcher) handleDelAddr(msg netlink.Message) error {
+	w.log.Println("Handling delete address message")
+
 	ifaddrmsg, err := getIfAddrmsg(msg.Data)
 	if err != nil {
 		return err
@@ -216,7 +221,7 @@ func (w *Watcher) handleDelAddr(msg netlink.Message) error {
 
 	idx := int(ifaddrmsg.Index)
 	if _, ok := w.ipCache[idx]; !ok {
-		w.log.Println("Not interested in deleted address on interface", idx)
+		w.log.Printf("Interface index %d not found in cache, skipping\n", idx)
 		return nil
 	}
 
@@ -247,8 +252,8 @@ func (w *Watcher) handleDelAddr(msg netlink.Message) error {
 	return nil
 }
 
-func (w *Watcher) handleNewAddr(msg netlink.Message) error {
-	var newIP *netip.Addr
+func (w *Watcher) handleNewAddr(msg netlink.Message, runHooks bool) error {
+	w.log.Println("Handling new address message")
 
 	ifaddrmsg, err := getIfAddrmsg(msg.Data)
 	if err != nil {
@@ -257,7 +262,7 @@ func (w *Watcher) handleNewAddr(msg netlink.Message) error {
 
 	idx := int(ifaddrmsg.Index)
 	if _, ok := w.ipCache[idx]; !ok {
-		w.log.Println("Not interested in added address on interface", idx)
+		w.log.Printf("Interface index %d not found in cache, skipping\n", idx)
 		return nil
 	}
 
@@ -266,37 +271,38 @@ func (w *Watcher) handleNewAddr(msg netlink.Message) error {
 		return err
 	}
 
+	var newIP *netip.Addr
 	for ad.Next() {
-		if newIP != nil {
-			break
+		if ad.Type() != unix.IFA_ADDRESS {
+			continue
 		}
-		switch ad.Type() {
-		case unix.IFA_ADDRESS:
-			{
-				ip := ad.Bytes()
-				addr, ok := netip.AddrFromSlice(ip)
-				if !ok {
-					w.log.Println("Address not of length 4 or 16")
-					return nil
-				}
+		ip := ad.Bytes()
+		addr, ok := netip.AddrFromSlice(ip)
+		if !ok {
+			w.log.Println("Address not of length 4 or 16")
+			return nil
+		}
 
-				if cachedIface, ok := w.ipCache[idx]; ok {
-					if _, ok := cachedIface[addr]; ok {
-						w.log.Println("New addr was found in cache, skipping hooks")
-						return nil
-					}
-				}
-
-				newIP = &addr
-				if !passesFilter(*newIP, w.filters...) {
-					w.log.Println("Address does not pass filters, skipping hooks")
-					return nil
-				}
-
-				w.log.Println("Caching new address")
-				w.cacheAddr(idx, addr)
+		if cachedIface, ok := w.ipCache[idx]; ok {
+			if _, ok := cachedIface[addr]; ok {
+				w.log.Println("New addr was found in cache, skipping hooks")
+				return nil
 			}
 		}
+
+		newIP = &addr
+		if !passesFilter(*newIP, w.filters...) {
+			w.log.Println("Address does not pass filters, skipping hooks")
+			return nil
+		}
+
+		w.log.Println("Caching new address")
+		w.cacheAddr(idx, addr)
+	}
+
+	if !runHooks {
+		w.log.Println("runHooks set to false, skipping hooks")
+		return nil
 	}
 
 	if newIP == nil {
@@ -364,46 +370,79 @@ func (w *Watcher) cacheAddr(iface int, addr netip.Addr) {
 	}
 }
 
-func (w *Watcher) Watch() error {
-	w.log.Println("Caching initial IPs")
-	var interestedInterfaces []net.Interface
-	var err error
-	if len(w.interfaces) > 0 {
-		for _, name := range w.interfaces {
-			if iface, err := net.InterfaceByName(name); err == nil {
-				interestedInterfaces = append(interestedInterfaces, *iface)
-			}
+func (w *Watcher) generateCache() error {
+	conn, err := netlink.Dial(unix.NETLINK_ROUTE, &netlink.Config{Strict: true})
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	w.log.Println("Hydrating cache with network interfaces")
+	linkResponses, err := conn.Execute(netlink.Message{
+		Header: netlink.Header{Type: unix.RTM_GETLINK, Flags: unix.NLM_F_REQUEST | unix.NLM_F_DUMP},
+		Data:   (*(*[unix.SizeofIfInfomsg]byte)(unsafe.Pointer(&unix.IfInfomsg{Family: unix.AF_UNSPEC})))[:],
+	})
+	if err != nil {
+		return err
+	}
+	for _, msg := range linkResponses {
+		if msg.Header.Type != unix.RTM_NEWLINK {
+			continue
 		}
-	} else {
-		interestedInterfaces, err = net.Interfaces()
+		ifinfomsg, err := getIfInfomsg(msg.Data)
 		if err != nil {
 			return err
+		}
+		ad, err := netlink.NewAttributeDecoder(msg.Data[unix.SizeofIfInfomsg:])
+		if err != nil {
+			return err
+		}
+		for ad.Next() {
+			switch ad.Type() {
+			case unix.IFA_LABEL:
+				if len(w.interfaces) > 0 {
+					for _, iface := range w.interfaces {
+						if iface == ad.String() {
+							w.l.Lock()
+							w.ipCache[int(ifinfomsg.Index)] = map[netip.Addr]struct{}{}
+							w.l.Unlock()
+						}
+					}
+				} else {
+					w.l.Lock()
+					w.ipCache[int(ifinfomsg.Index)] = map[netip.Addr]struct{}{}
+					w.l.Unlock()
+				}
+			}
 		}
 	}
 
-	for _, iface := range interestedInterfaces {
-		// start with empty map
-		w.l.Lock()
-		w.ipCache[iface.Index] = map[netip.Addr]struct{}{}
-		w.l.Unlock()
+	w.log.Println("Caching initial IPs")
+	responses, err := conn.Execute(netlink.Message{
+		Header: netlink.Header{Type: unix.RTM_GETADDR, Flags: unix.NLM_F_REQUEST | unix.NLM_F_DUMP},
+		Data:   (*(*[unix.SizeofIfAddrmsg]byte)(unsafe.Pointer(&unix.IfAddrmsg{Family: unix.AF_UNSPEC})))[:],
+	})
+	if err != nil {
+		return err
+	}
 
-		addrs, err := iface.Addrs()
-		if err != nil {
-			return err
-		}
-
-		for _, addr := range addrs {
-			ip, err := netip.ParseAddr(addr.(*net.IPNet).IP.String())
-			if err != nil {
+	for _, msg := range responses {
+		if msg.Header.Type == unix.RTM_NEWADDR {
+			runHooks := false
+			if err := w.handleNewAddr(msg, runHooks); err != nil {
 				return err
 			}
-			if passesFilter(ip, w.filters...) {
-				w.log.Println("Caching address", iface.Name, ip)
-				w.cacheAddr(iface.Index, ip)
-			} else {
-				w.log.Println("Not caching address", iface.Name, ip)
-			}
 		}
+	}
+
+	return nil
+}
+
+// Watch watches for IP address changes performs hook actions on new IP
+// addresses. This function blocks.
+func (w *Watcher) Watch() error {
+	if err := w.generateCache(); err != nil {
+		return err
 	}
 
 	if len(w.interfaces) > 0 {
@@ -433,17 +472,16 @@ func (w *Watcher) Watch() error {
 			w.log.Println(err)
 			continue
 		}
-		w.log.Println("Received netlink message")
+		w.log.Println("Received netlink messages")
 		for _, msg := range msgs {
 			switch msg.Header.Type {
 			case unix.RTM_DELADDR:
-				w.log.Println("Handling delete address message")
 				if err := w.handleDelAddr(msg); err != nil {
 					w.log.Println(err)
 				}
 			case unix.RTM_NEWADDR:
-				w.log.Println("Handling new address message")
-				if err := w.handleNewAddr(msg); err != nil {
+				runHooks := true
+				if err := w.handleNewAddr(msg, runHooks); err != nil {
 					w.log.Println(err)
 				}
 			}

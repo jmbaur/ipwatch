@@ -1,3 +1,4 @@
+// main is the entrypoint for the command line interface for ipwatch
 package main
 
 import (
@@ -49,7 +50,7 @@ func logic() error {
 	)
 	flag.Parse()
 
-	if watcher, err := ipwatch.NewWatcher(ipwatch.WatchConfig{
+	watcher, err := ipwatch.NewWatcher(ipwatch.WatchConfig{
 		Debug:      *debug,
 		MaxRetries: *maxRetries,
 		Interfaces: ifaces,
@@ -57,11 +58,12 @@ func logic() error {
 		IPv4:       *doIPv4,
 		IPv6:       *doIPv6,
 		Filters:    filters,
-	}); err != nil {
+	})
+	if err != nil {
 		return err
-	} else {
-		return watcher.Watch()
 	}
+
+	return watcher.Watch()
 }
 
 func main() {
