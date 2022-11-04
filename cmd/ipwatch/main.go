@@ -58,11 +58,12 @@ func logic() error {
 	}
 
 	return watcher.Watch(ipwatch.WatchConfig{
-		MaxRetries: *maxRetries,
+		Filters:    filters,
 		Hooks:      hooks,
 		IPv4:       *doIPv4,
 		IPv6:       *doIPv6,
-		Filters:    filters,
+		Interfaces: ifaces,
+		MaxRetries: *maxRetries,
 	})
 }
 
