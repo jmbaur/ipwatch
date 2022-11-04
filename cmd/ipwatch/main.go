@@ -1,3 +1,5 @@
+//go:build linux
+
 // main is the entrypoint for the command line interface for ipwatch
 package main
 
@@ -50,20 +52,18 @@ func logic() error {
 	)
 	flag.Parse()
 
-	watcher, err := ipwatch.NewWatcher(ipwatch.WatchConfig{
-		Debug:      *debug,
+	watcher, err := ipwatch.NewWatcher(ipwatch.WatcherConfig{Debug: *debug})
+	if err != nil {
+		return err
+	}
+
+	return watcher.Watch(ipwatch.WatchConfig{
 		MaxRetries: *maxRetries,
-		Interfaces: ifaces,
 		Hooks:      hooks,
 		IPv4:       *doIPv4,
 		IPv6:       *doIPv6,
 		Filters:    filters,
 	})
-	if err != nil {
-		return err
-	}
-
-	return watcher.Watch()
 }
 
 func main() {

@@ -116,68 +116,31 @@ func passesFilter(addr netip.Addr, filters ...string) bool {
 	return true
 }
 
-// WatchConfig is used to create a watcher
+// WatcherConfig controls how the watcher behaves.
+type WatcherConfig struct {
+	Debug bool
+}
+
+// WatchConfig sets filters and hooks for the watcher.
 type WatchConfig struct {
-	Debug      bool
-	MaxRetries uint
-	Interfaces []string
+	Filters    []string
 	Hooks      []string
 	IPv4       bool
 	IPv6       bool
-	Filters    []string
+	Interfaces []string
+	MaxRetries uint
 }
 
 // Watcher can be used to watch changes to IP addresses, optionally filtering
 // on interface and/or IP address types.
 type Watcher struct {
-	log        *log.Logger
-	interfaces []string
-	hooks      []Hook
-	filters    []string
-	maxRetries uint
-
+	log     *log.Logger
 	l       sync.Mutex
 	ipCache map[int]map[netip.Addr]struct{}
 }
 
 // NewWatcher parses a WatchConfig and returns a new Watcher.
-func NewWatcher(cfg WatchConfig) (*Watcher, error) {
-	if cfg.IPv4 && cfg.IPv6 {
-		return nil, ErrInvalidIPProtocol
-	}
-
-	if cfg.IPv4 {
-		cfg.Filters = append(cfg.Filters, "Is4")
-	}
-	if cfg.IPv6 {
-		cfg.Filters = append(cfg.Filters, "Is6")
-	}
-
-	if len(cfg.Hooks) == 0 {
-		cfg.Hooks = append(cfg.Hooks, "internal:echo")
-	}
-	hooks := []Hook{}
-	for _, hookName := range cfg.Hooks {
-		hook, err := NewHook(hookName)
-		if err != nil {
-			return nil, fmt.Errorf("%w: %s", err, hookName)
-		}
-		hooks = append(hooks, hook)
-	}
-
-	filterMap := map[string]struct{}{}
-	for _, filter := range cfg.Filters {
-		if !isValidFilter(filter) {
-			return nil, fmt.Errorf("%w: %s", ErrInvalidFilter, filter)
-		}
-		filterMap[filter] = struct{}{}
-	}
-
-	filters := []string{}
-	for k := range filterMap {
-		filters = append(filters, k)
-	}
-
+func NewWatcher(cfg WatcherConfig) (*Watcher, error) {
 	var logger *log.Logger
 	if cfg.Debug {
 		logger = log.Default()
@@ -186,12 +149,8 @@ func NewWatcher(cfg WatchConfig) (*Watcher, error) {
 	}
 
 	return &Watcher{
-		log:        logger,
-		interfaces: cfg.Interfaces,
-		hooks:      hooks,
-		filters:    filters,
-		maxRetries: cfg.MaxRetries,
-		ipCache:    map[int]map[netip.Addr]struct{}{},
+		log:     logger,
+		ipCache: map[int]map[netip.Addr]struct{}{},
 	}, nil
 }
 
@@ -252,7 +211,7 @@ func (w *Watcher) handleDelAddr(msg netlink.Message) error {
 	return nil
 }
 
-func (w *Watcher) handleNewAddr(msg netlink.Message, runHooks bool) error {
+func (w *Watcher) handleNewAddr(msg netlink.Message, filters []string, hooks []Hook, maxRetries uint) error {
 	w.log.Println("Handling new address message")
 
 	ifaddrmsg, err := getIfAddrmsg(msg.Data)
@@ -291,18 +250,13 @@ func (w *Watcher) handleNewAddr(msg netlink.Message, runHooks bool) error {
 		}
 
 		newIP = &addr
-		if !passesFilter(*newIP, w.filters...) {
+		if !passesFilter(*newIP, filters...) {
 			w.log.Println("Address does not pass filters, skipping hooks")
 			return nil
 		}
 
 		w.log.Println("Caching new address")
 		w.cacheAddr(idx, addr)
-	}
-
-	if !runHooks {
-		w.log.Println("runHooks set to false, skipping hooks")
-		return nil
 	}
 
 	if newIP == nil {
@@ -313,11 +267,11 @@ func (w *Watcher) handleNewAddr(msg netlink.Message, runHooks bool) error {
 	var wg sync.WaitGroup
 	var l sync.Mutex
 
-	for _, hook := range w.hooks {
+	for _, hook := range hooks {
 		wg.Add(1)
 		hook := hook
 		go func() {
-			for i := 1; i <= int(w.maxRetries); i++ {
+			for i := 1; i <= int(maxRetries); i++ {
 				backoff := time.Duration(math.Pow(2, float64(i))) * time.Second
 
 				if hookOutput, err := hook.Run(ifaddrmsg.Index, *newIP); err != nil {
@@ -327,7 +281,7 @@ func (w *Watcher) handleNewAddr(msg netlink.Message, runHooks bool) error {
 						outputs = append(outputs, hookOutput)
 					}
 					outputs = append(outputs, err.Error())
-					if i < int(w.maxRetries) {
+					if i < int(maxRetries) {
 						outputs = append(outputs, fmt.Sprintf("Retrying in %s", backoff))
 					} else {
 						outputs = append(outputs, "Max attempts reached")
@@ -370,7 +324,7 @@ func (w *Watcher) cacheAddr(iface int, addr netip.Addr) {
 	}
 }
 
-func (w *Watcher) generateCache() error {
+func (w *Watcher) generateCache(interfaces []string, filters []string) error {
 	conn, err := netlink.Dial(unix.NETLINK_ROUTE, &netlink.Config{Strict: true})
 	if err != nil {
 		return err
@@ -400,8 +354,8 @@ func (w *Watcher) generateCache() error {
 		for ad.Next() {
 			switch ad.Type() {
 			case unix.IFA_LABEL:
-				if len(w.interfaces) > 0 {
-					for _, iface := range w.interfaces {
+				if len(interfaces) > 0 {
+					for _, iface := range interfaces {
 						if iface == ad.String() {
 							w.l.Lock()
 							w.ipCache[int(ifinfomsg.Index)] = map[netip.Addr]struct{}{}
@@ -428,8 +382,7 @@ func (w *Watcher) generateCache() error {
 
 	for _, msg := range responses {
 		if msg.Header.Type == unix.RTM_NEWADDR {
-			runHooks := false
-			if err := w.handleNewAddr(msg, runHooks); err != nil {
+			if err := w.handleNewAddr(msg, filters, []Hook{}, 0); err != nil {
 				return err
 			}
 		}
@@ -440,15 +393,51 @@ func (w *Watcher) generateCache() error {
 
 // Watch watches for IP address changes performs hook actions on new IP
 // addresses. This function blocks.
-func (w *Watcher) Watch() error {
-	if err := w.generateCache(); err != nil {
+func (w *Watcher) Watch(cfg WatchConfig) error {
+	if cfg.IPv4 && cfg.IPv6 {
+		return ErrInvalidIPProtocol
+	}
+
+	if cfg.IPv4 {
+		cfg.Filters = append(cfg.Filters, "Is4")
+	}
+	if cfg.IPv6 {
+		cfg.Filters = append(cfg.Filters, "Is6")
+	}
+
+	if len(cfg.Hooks) == 0 {
+		cfg.Hooks = append(cfg.Hooks, "internal:echo")
+	}
+	hooks := []Hook{}
+	for _, hookName := range cfg.Hooks {
+		hook, err := NewHook(hookName)
+		if err != nil {
+			return fmt.Errorf("%w: %s", err, hookName)
+		}
+		hooks = append(hooks, hook)
+	}
+
+	filterMap := map[string]struct{}{}
+	for _, filter := range cfg.Filters {
+		if !isValidFilter(filter) {
+			return fmt.Errorf("%w: %s", ErrInvalidFilter, filter)
+		}
+		filterMap[filter] = struct{}{}
+	}
+
+	filters := []string{}
+	for k := range filterMap {
+		filters = append(filters, k)
+	}
+
+	if err := w.generateCache(cfg.Interfaces, filters); err != nil {
 		return err
 	}
 
-	if len(w.interfaces) > 0 {
+	if len(cfg.Interfaces) > 0 {
 		w.log.Printf(
 			"Listening for IP address changes on %s\n",
-			strings.Join(w.interfaces, ", "),
+			strings.Join(cfg.Interfaces, ", "),
 		)
 	} else {
 		w.log.Println(
@@ -480,8 +469,7 @@ func (w *Watcher) Watch() error {
 					w.log.Println(err)
 				}
 			case unix.RTM_NEWADDR:
-				runHooks := true
-				if err := w.handleNewAddr(msg, runHooks); err != nil {
+				if err := w.handleNewAddr(msg, filters, hooks, cfg.MaxRetries); err != nil {
 					w.log.Println(err)
 				}
 			}
