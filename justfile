@@ -6,6 +6,9 @@ help:
 build:
 	go build -o $out/ipwatch ./cmd/ipwatch
 
+run:
+	go run ./cmd/ipwatch -debug -filter=!IsLoopback
+
 check: build
 	go test ./...
 	revive -set_exit_status=1 ./...
@@ -18,6 +21,3 @@ update:
 	newvendorSha256="$(nix-prefetch \
 	 "{ sha256 }: ((import <nixpkgs> {}).callPackage ./. {}).go-modules.overrideAttrs (_: { vendorSha256 = sha256; })")"
 	sed -i "s|vendorSha256.*|vendorSha256 = \"$newvendorSha256\";|" default.nix
-
-run:
-	go run ./cmd/ipwatch -debug -4 -hook=internal:echo -filter=!IsLoopback

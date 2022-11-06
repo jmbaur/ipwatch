@@ -2,6 +2,17 @@
 // address changes to network interfaces.
 package ipwatch
 
+/*
+#include <time.h>
+static unsigned int get_secs(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (unsigned int)ts.tv_sec;
+}
+*/
+import "C"
+
 import (
 	"errors"
 	"fmt"
@@ -155,18 +166,25 @@ func NewWatcher(cfg WatcherConfig) (*Watcher, error) {
 }
 
 func getIfInfomsg(ifinfomsg []byte) (*unix.IfInfomsg, error) {
-	if len(ifinfomsg) < unix.SizeofIfInfomsg {
-		return nil, fmt.Errorf("%w: %s", ErrIncorrectSizeOf, "ifinfomsg")
-	}
-
+	// struct ifinfomsg {
+	//		unsigned char	ifi_family;
+	//		unsigned char	__ifi_pad;
+	//		unsigned short	ifi_type;		/* ARPHRD_*				*/
+	//		int				ifi_index;		/* Link index			*/
+	//		unsigned		ifi_flags;		/* IFF_* flags			*/
+	//		unsigned		ifi_change;		/* IFF_* change mask	*/
+	// };
 	return (*unix.IfInfomsg)(unsafe.Pointer(&ifinfomsg[0:unix.SizeofIfInfomsg][0])), nil
 }
 
 func getIfAddrmsg(ifaddrmsg []byte) (*unix.IfAddrmsg, error) {
-	if len(ifaddrmsg) < unix.SizeofIfAddrmsg {
-		return nil, fmt.Errorf("%w: %s", ErrIncorrectSizeOf, "ifaddrmsg")
-	}
-
+	// struct ifaddrmsg {
+	//		__u8		ifa_family;
+	//		__u8		ifa_prefixlen;	/* The prefix length	*/
+	//		__u8		ifa_flags;		/* Flags				*/
+	//		__u8		ifa_scope;		/* Address scope		*/
+	//		__u32		ifa_index;		/* Link index			*/
+	// };
 	return (*unix.IfAddrmsg)(unsafe.Pointer(&ifaddrmsg[0:unix.SizeofIfAddrmsg][0])), nil
 }
 
@@ -211,7 +229,7 @@ func (w *Watcher) handleDelAddr(msg netlink.Message) error {
 	return nil
 }
 
-func (w *Watcher) handleNewAddr(msg netlink.Message, filters []string, hooks []Hook, maxRetries uint) error {
+func (w *Watcher) handleNewAddr(msg netlink.Message, filters []string, hooks []Hook, maxRetries uint, startup bool) error {
 	w.log.Println("Handling new address message")
 
 	ifaddrmsg, err := getIfAddrmsg(msg.Data)
@@ -230,51 +248,84 @@ func (w *Watcher) handleNewAddr(msg netlink.Message, filters []string, hooks []H
 		return err
 	}
 
-	var newIP *netip.Addr
-	for ad.Next() {
-		if ad.Type() != unix.IFA_ADDRESS {
-			continue
-		}
-		ip := ad.Bytes()
-		addr, ok := netip.AddrFromSlice(ip)
-		if !ok {
-			w.log.Println("Address not of length 4 or 16")
-			return nil
-		}
+	var (
+		fresh bool
+		newIP netip.Addr
+	)
 
-		if cachedIface, ok := w.ipCache[idx]; ok {
-			if _, ok := cachedIface[addr]; ok {
-				w.log.Println("New addr was found in cache, skipping hooks")
-				return nil
+	for ad.Next() {
+		switch ad.Type() {
+		case unix.IFA_CACHEINFO:
+			{
+				// struct ifa_cacheinfo {
+				//		__u32	ifa_prefered;
+				//		__u32	ifa_valid;
+				//		__u32	cstamp; /* created timestamp, hundredths of seconds */
+				//		__u32	tstamp; /* updated timestamp, hundredths of seconds */
+				// };
+				ifacacheinfo := (*unix.IfaCacheinfo)(unsafe.Pointer(&ad.Bytes()[0:unix.SizeofIfaCacheinfo][0]))
+
+				monotonic := int64(C.get_secs())
+				updatedAt := int64(ifacacheinfo.Tstamp / 100)
+				fresh = time.Duration(monotonic-updatedAt)*time.Second < 30*time.Second
+			}
+		case unix.IFA_ADDRESS:
+			{
+				ip := ad.Bytes()
+				addr, ok := netip.AddrFromSlice(ip)
+				if !ok {
+					w.log.Println("Address not of length 4 or 16")
+					return nil
+				}
+
+				if cachedIface, ok := w.ipCache[idx]; ok {
+					if _, ok := cachedIface[addr]; ok {
+						w.log.Println("New addr was found in cache, skipping hooks")
+						return nil
+					}
+				}
+
+				newIP = addr
 			}
 		}
-
-		newIP = &addr
-		if !passesFilter(*newIP, filters...) {
-			w.log.Println("Address does not pass filters, skipping hooks")
-			return nil
-		}
-
-		w.log.Println("Caching new address")
-		w.cacheAddr(idx, addr)
 	}
 
-	if newIP == nil {
+	if !newIP.IsValid() {
 		w.log.Println("No address found, skipping hooks")
 		return nil
 	}
 
-	var wg sync.WaitGroup
-	var l sync.Mutex
+	if !passesFilter(newIP, filters...) {
+		w.log.Println("Address does not pass filters, skipping hooks")
+		return nil
+	}
+
+	w.log.Println("Caching new address", newIP)
+	w.cacheAddr(idx, newIP)
+
+	if !fresh && startup {
+		w.log.Println("IP address is not new and the program did not just startup, skipping hooks")
+		return nil
+	} else if fresh && startup {
+		w.log.Println("Fresh IP address and starting up, running hooks")
+	}
+
+	var (
+		wg sync.WaitGroup
+		l  sync.Mutex
+	)
 
 	for _, hook := range hooks {
 		wg.Add(1)
 		hook := hook
+		if maxRetries < 1 {
+			maxRetries = 1
+		}
 		go func() {
 			for i := 1; i <= int(maxRetries); i++ {
 				backoff := time.Duration(math.Pow(2, float64(i))) * time.Second
 
-				if hookOutput, err := hook.Run(ifaddrmsg.Index, *newIP); err != nil {
+				if hookOutput, err := hook.Run(ifaddrmsg.Index, newIP); err != nil {
 					outputs := []string{}
 					outputs = append(outputs, fmt.Sprintf("Hook '%s' failed", hook.Name()))
 					if len(hookOutput) > 0 {
@@ -324,7 +375,7 @@ func (w *Watcher) cacheAddr(iface int, addr netip.Addr) {
 	}
 }
 
-func (w *Watcher) generateCache(interfaces []string, filters []string) error {
+func (w *Watcher) generateCache(interfaces []string, filters []string, hooks []Hook, maxRetries uint) error {
 	conn, err := netlink.Dial(unix.NETLINK_ROUTE, &netlink.Config{Strict: true})
 	if err != nil {
 		return err
@@ -382,7 +433,8 @@ func (w *Watcher) generateCache(interfaces []string, filters []string) error {
 
 	for _, msg := range responses {
 		if msg.Header.Type == unix.RTM_NEWADDR {
-			if err := w.handleNewAddr(msg, filters, []Hook{}, 0); err != nil {
+			startup := true
+			if err := w.handleNewAddr(msg, filters, hooks, maxRetries, startup); err != nil {
 				return err
 			}
 		}
@@ -430,7 +482,7 @@ func (w *Watcher) Watch(cfg WatchConfig) error {
 		filters = append(filters, k)
 	}
 
-	if err := w.generateCache(cfg.Interfaces, filters); err != nil {
+	if err := w.generateCache(cfg.Interfaces, filters, hooks, cfg.MaxRetries); err != nil {
 		return err
 	}
 
@@ -469,7 +521,8 @@ func (w *Watcher) Watch(cfg WatchConfig) error {
 					w.log.Println(err)
 				}
 			case unix.RTM_NEWADDR:
-				if err := w.handleNewAddr(msg, filters, hooks, cfg.MaxRetries); err != nil {
+				startup := false
+				if err := w.handleNewAddr(msg, filters, hooks, cfg.MaxRetries, startup); err != nil {
 					w.log.Println(err)
 				}
 			}

@@ -37,7 +37,7 @@
       });
       ci = pkgs.mkShell {
         buildInputs = with pkgs; [ go-tools just nix-prefetch revive ];
-        inherit (pkgs.ipwatch) CGO_ENABLED nativeBuildInputs;
+        inherit (pkgs.ipwatch) nativeBuildInputs;
       };
     });
     packages = forAllSystems ({ pkgs, ... }: {

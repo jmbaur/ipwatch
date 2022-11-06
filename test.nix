@@ -36,7 +36,7 @@ nixosTest {
 
     # dhcp
     machine.systemctl("reload dhcpcd.service")
-    machine.wait_for_console_text("eth0:\ rebinding")
+    machine.wait_for_console_text("eth0: rebinding")
     machine.wait_for_console_text("New addr was found in cache, skipping hooks")
   '';
 }
