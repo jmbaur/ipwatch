@@ -17,6 +17,7 @@ check: build
 update:
 	#!/usr/bin/env bash
 	go get -u all
+	go mod tidy
 	export NIX_PATH="nixpkgs=$(nix flake prefetch nixpkgs --json | jq --raw-output '.storePath')"
 	newvendorSha256="$(nix-prefetch \
 	 "{ sha256 }: ((import <nixpkgs> {}).callPackage ./. {}).go-modules.overrideAttrs (_: { vendorSha256 = sha256; })")"
