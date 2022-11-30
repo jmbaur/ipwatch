@@ -167,23 +167,23 @@ func NewWatcher(cfg WatcherConfig) (*Watcher, error) {
 
 func getIfInfomsg(ifinfomsg []byte) (*unix.IfInfomsg, error) {
 	// struct ifinfomsg {
-	//		unsigned char	ifi_family;
-	//		unsigned char	__ifi_pad;
-	//		unsigned short	ifi_type;		/* ARPHRD_*				*/
-	//		int				ifi_index;		/* Link index			*/
-	//		unsigned		ifi_flags;		/* IFF_* flags			*/
-	//		unsigned		ifi_change;		/* IFF_* change mask	*/
+	//   unsigned char   ifi_family;
+	//   unsigned char   __ifi_pad;
+	//   unsigned short  ifi_type;   // ARPHRD_*
+	//   int             ifi_index;  // Link index
+	//   unsigned        ifi_flags;  // IFF_* flags
+	//   unsigned        ifi_change; // IFF_* change mask
 	// };
 	return (*unix.IfInfomsg)(unsafe.Pointer(&ifinfomsg[0:unix.SizeofIfInfomsg][0])), nil
 }
 
 func getIfAddrmsg(ifaddrmsg []byte) (*unix.IfAddrmsg, error) {
 	// struct ifaddrmsg {
-	//		__u8		ifa_family;
-	//		__u8		ifa_prefixlen;	/* The prefix length	*/
-	//		__u8		ifa_flags;		/* Flags				*/
-	//		__u8		ifa_scope;		/* Address scope		*/
-	//		__u32		ifa_index;		/* Link index			*/
+	//   __u8   ifa_family;
+	//   __u8   ifa_prefixlen;  // The prefix length
+	//   __u8   ifa_flags;      // Flags
+	//   __u8   ifa_scope;      // Address scope
+	//   __u32  ifa_index;      // Link index
 	// };
 	return (*unix.IfAddrmsg)(unsafe.Pointer(&ifaddrmsg[0:unix.SizeofIfAddrmsg][0])), nil
 }
@@ -258,10 +258,10 @@ func (w *Watcher) handleNewAddr(msg netlink.Message, filters []string, hooks []H
 		case unix.IFA_CACHEINFO:
 			{
 				// struct ifa_cacheinfo {
-				//		__u32	ifa_prefered;
-				//		__u32	ifa_valid;
-				//		__u32	cstamp; /* created timestamp, hundredths of seconds */
-				//		__u32	tstamp; /* updated timestamp, hundredths of seconds */
+				//   __u32  ifa_prefered;
+				//   __u32  ifa_valid;
+				//   __u32  cstamp;  // created timestamp, hundredths of seconds
+				//   __u32  tstamp;  // updated timestamp, hundredths of seconds
 				// };
 				ifacacheinfo := (*unix.IfaCacheinfo)(unsafe.Pointer(&ad.Bytes()[0:unix.SizeofIfaCacheinfo][0]))
 
