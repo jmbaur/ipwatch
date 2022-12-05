@@ -21,7 +21,7 @@ type Hook interface {
 }
 
 // NewHook returns a hook, parsing the hook format '<hook name>:<hook value>'.
-func NewHook(hook string) (Hook, error) {
+func NewHook(hook string, hookEnvironment []string) (Hook, error) {
 	split := strings.SplitN(hook, ":", 2)
 	if len(split) != 2 {
 		return nil, ErrInvalidHook
@@ -35,7 +35,7 @@ func NewHook(hook string) (Hook, error) {
 			return &Echo{}, nil
 		}
 	case "executable":
-		return &Executable{ExeName: split[1]}, nil
+		return &Executable{ExeName: split[1], Environment: hookEnvironment}, nil
 	}
 
 	return nil, ErrInvalidHook
@@ -61,6 +61,9 @@ func (e *Echo) Run(ifaceIdx uint32, addr netip.Addr) (string, error) {
 type Executable struct {
 	// The name or full path to an executable
 	ExeName string
+	// Environment contains strings representing the environment, in the form
+	// "key=value" (the same as os.Environ).
+	Environment []string
 }
 
 // Name implements Hook
@@ -72,6 +75,7 @@ func (e *Executable) Name() string {
 func (e *Executable) Run(ifaceIdx uint32, addr netip.Addr) (string, error) {
 	cmd := exec.Command(e.ExeName)
 	cmd.Env = append(cmd.Env, os.Environ()...)
+	cmd.Env = append(cmd.Env, e.Environment...)
 	cmd.Env = append(cmd.Env, fmt.Sprintf("IFACE_IDX=%d", ifaceIdx))
 	cmd.Env = append(cmd.Env, fmt.Sprintf("ADDR=%s", addr))
 

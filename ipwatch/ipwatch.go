@@ -134,12 +134,13 @@ type WatcherConfig struct {
 
 // WatchConfig sets filters and hooks for the watcher.
 type WatchConfig struct {
-	Filters    []string
-	Hooks      []string
-	IPv4       bool
-	IPv6       bool
-	Interfaces []string
-	MaxRetries uint
+	Filters         []string
+	Hooks           []string
+	IPv4            bool
+	IPv6            bool
+	Interfaces      []string
+	MaxRetries      uint
+	HookEnvironment []string
 }
 
 // Watcher can be used to watch changes to IP addresses, optionally filtering
@@ -462,7 +463,7 @@ func (w *Watcher) Watch(cfg WatchConfig) error {
 	}
 	hooks := []Hook{}
 	for _, hookName := range cfg.Hooks {
-		hook, err := NewHook(hookName)
+		hook, err := NewHook(hookName, cfg.HookEnvironment)
 		if err != nil {
 			return fmt.Errorf("%w: %s", err, hookName)
 		}

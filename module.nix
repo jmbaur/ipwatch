@@ -36,11 +36,12 @@ with lib;
         Filters to apply on new IP addresses that will conditionally run hooks.
       '';
     };
-    environmentFile = lib.mkOption {
+    hookEnvironmentFile = lib.mkOption {
       type = types.nullOr types.path;
       default = null;
       description = ''
-        File to use to set the environment for hooks that need it.
+        File to use to set the environment for executable hooks. Each line in
+        this file should be of the form `KEY=VAL`.
       '';
     };
   };
@@ -50,13 +51,13 @@ with lib;
       enable = true;
       description = "ipwatch (https://github.com/jmbaur/ipwatch)";
       serviceConfig = {
-        EnvironmentFile = mkIf (cfg.environmentFile != null) cfg.environmentFile;
+        LoadCredential = [ "hook-environment-file:${hookEnvironmentFile}" ];
         ExecStart = lib.escapeShellArgs ([ "${cfg.package}/bin/ipwatch" ] ++
           lib.flatten (
             (map (iface: "-interface=${iface}") cfg.interfaces) ++
               (map (hook: "-hook=${hook}") cfg.hooks) ++
               (map (filter: "-filter=${filter}") cfg.filters)
-          ) ++ cfg.extraArgs
+          ) ++ [ "-env=\${CREDENTIALS_DIRECTORY}/hook-environment-file" ] ++ cfg.extraArgs
         );
 
         CapabilityBoundingSet = [ ];
