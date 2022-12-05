@@ -51,7 +51,7 @@ with lib;
       enable = true;
       description = "ipwatch (https://github.com/jmbaur/ipwatch)";
       serviceConfig = {
-        LoadCredential = [ "hook-environment-file:${hookEnvironmentFile}" ];
+        LoadCredential = lib.optional (cfg.hookEnvironmentFile != null) "hook-environment-file:${cfg.hookEnvironmentFile}";
         ExecStart = lib.escapeShellArgs ([ "${cfg.package}/bin/ipwatch" ] ++
           lib.flatten (
             (map (iface: "-interface=${iface}") cfg.interfaces) ++
