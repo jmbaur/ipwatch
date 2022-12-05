@@ -57,7 +57,7 @@ with lib;
             (map (iface: "-interface=${iface}") cfg.interfaces) ++
               (map (hook: "-hook=${hook}") cfg.hooks) ++
               (map (filter: "-filter=${filter}") cfg.filters)
-          ) ++ [ "-env=\${CREDENTIALS_DIRECTORY}/hook-environment-file" ] ++ cfg.extraArgs
+          ) ++ (lib.optional (cfg.hookEnvironmentFile != null) "-env=\${CREDENTIALS_DIRECTORY}/hook-environment-file") ++ cfg.extraArgs
         );
 
         CapabilityBoundingSet = [ ];
