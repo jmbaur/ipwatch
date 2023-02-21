@@ -2,17 +2,6 @@
 // address changes to network interfaces.
 package ipwatch
 
-/*
-#include <time.h>
-static unsigned int get_secs(void)
-{
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (unsigned int)ts.tv_sec;
-}
-*/
-import "C"
-
 import (
 	"errors"
 	"fmt"
@@ -22,6 +11,7 @@ import (
 	"net/netip"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 	"unsafe"
 
@@ -266,8 +256,10 @@ func (w *Watcher) handleNewAddr(msg netlink.Message, filters []string, hooks []H
 				// };
 				ifacacheinfo := (*unix.IfaCacheinfo)(unsafe.Pointer(&ad.Bytes()[0:unix.SizeofIfaCacheinfo][0]))
 
-				monotonic := int64(C.get_secs())
-				updatedAt := int64(ifacacheinfo.Tstamp / 100)
+				var ts syscall.Timespec
+				syscall.Syscall(syscall.SYS_CLOCK_GETTIME, unix.CLOCK_MONOTONIC, uintptr(unsafe.Pointer(&ts)), 0)
+				monotonic := uint64(ts.Sec)
+				updatedAt := uint64(ifacacheinfo.Tstamp / 100)
 				fresh = time.Duration(monotonic-updatedAt)*time.Second < 30*time.Second
 			}
 		case unix.IFA_ADDRESS:
