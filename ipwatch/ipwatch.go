@@ -257,10 +257,10 @@ func (w *Watcher) handleNewAddr(msg netlink.Message, filters []string, hooks []H
 				ifacacheinfo := (*unix.IfaCacheinfo)(unsafe.Pointer(&ad.Bytes()[0:unix.SizeofIfaCacheinfo][0]))
 
 				var ts syscall.Timespec
-				syscall.Syscall(syscall.SYS_CLOCK_GETTIME, unix.CLOCK_MONOTONIC, uintptr(unsafe.Pointer(&ts)), 0)
-				monotonic := uint64(ts.Sec)
+				syscall.Syscall(syscall.SYS_CLOCK_GETTIME, unix.CLOCK_BOOTTIME, uintptr(unsafe.Pointer(&ts)), 0)
+				boottime := uint64(ts.Sec)
 				updatedAt := uint64(ifacacheinfo.Tstamp / 100)
-				fresh = time.Duration(monotonic-updatedAt)*time.Second < 30*time.Second
+				fresh = time.Duration(boottime-updatedAt)*time.Second < 30*time.Second
 			}
 		case unix.IFA_ADDRESS:
 			{
