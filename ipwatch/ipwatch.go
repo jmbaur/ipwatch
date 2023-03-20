@@ -318,7 +318,8 @@ func (w *Watcher) handleNewAddr(msg netlink.Message, filters []string, hooks []H
 			for i := 1; i <= int(maxRetries); i++ {
 				backoff := time.Duration(math.Pow(2, float64(i))) * time.Second
 
-				if hookOutput, err := hook.Run(ifaddrmsg.Index, newIP); err != nil {
+				hookOutput, err := hook.Run(ifaddrmsg.Index, newIP)
+				if err != nil {
 					outputs := []string{}
 					outputs = append(outputs, fmt.Sprintf("Hook '%s' failed", hook.Name()))
 					if len(hookOutput) > 0 {
@@ -337,20 +338,21 @@ func (w *Watcher) handleNewAddr(msg netlink.Message, filters []string, hooks []H
 
 					time.Sleep(backoff)
 					continue
-				} else {
-					outputs := []string{}
-					outputs = append(outputs, fmt.Sprintf("Hook '%s' succeeded", hook.Name()))
-					if len(hookOutput) > 0 {
-						outputs = append(outputs, hookOutput)
-					}
-
-					l.Lock()
-					printOutput(outputs...)
-					l.Unlock()
-
-					wg.Done()
-					break
 				}
+
+				outputs := []string{}
+				outputs = append(outputs, fmt.Sprintf("Hook '%s' succeeded", hook.Name()))
+				if len(hookOutput) > 0 {
+					outputs = append(outputs, hookOutput)
+				}
+
+				l.Lock()
+				printOutput(outputs...)
+				l.Unlock()
+
+				wg.Done()
+				break
+
 			}
 		}()
 	}
