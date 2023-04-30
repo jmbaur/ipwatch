@@ -3,7 +3,7 @@ buildGoModule {
   pname = "ipwatch";
   version = "0.2.3";
   src = ./.;
-  vendorSha256 = "sha256-mCg6s2ygYiUdGvizvju9xDB6NrH3WAZkVocxlytsNro=";
+  vendorSha256 = "sha256-8+cmreIfjMET+v6sttEDfYtlqdXcevcJFFNlLdr7o6c=";
   ldflags = [ "-s" "-w" ];
   CGO_ENABLED = 0;
 }
