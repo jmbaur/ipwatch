@@ -3,9 +3,8 @@ let
   cfg = config.services.ipwatch;
   deps = map (iface: "sys-subsystem-net-devices-${utils.escapeSystemdPath iface}.device") cfg.interfaces;
 in
-with lib;
 {
-  options.services.ipwatch = {
+  options.services.ipwatch = with lib; {
     enable = mkEnableOption "Enable ipwatch service";
     package = mkPackageOption pkgs "ipwatch" { };
     extraArgs = mkOption {
@@ -16,7 +15,7 @@ with lib;
       '';
     };
     hooks = mkOption {
-      type = types.listOf types.string;
+      type = types.listOf types.str;
       default = [ "internal:echo" ];
       description = ''
         Hooks to run after receiving a new IP address.
@@ -46,7 +45,7 @@ with lib;
     };
   };
 
-  config = mkIf cfg.enable {
+  config = lib.mkIf cfg.enable {
     systemd.services.ipwatch = {
       enable = true;
       description = "ipwatch (https://github.com/jmbaur/ipwatch)";
