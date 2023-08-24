@@ -79,6 +79,12 @@ func (e *Executable) Run(ifaceIdx uint32, addr netip.Addr) (string, error) {
 	cmd.Env = append(cmd.Env, fmt.Sprintf("IFACE_IDX=%d", ifaceIdx))
 	cmd.Env = append(cmd.Env, fmt.Sprintf("ADDR=%s", addr))
 
+	if addr.Is6() {
+		cmd.Env = append(cmd.Env, "IS_IP6=1")
+	} else if addr.Is4() {
+		cmd.Env = append(cmd.Env, "IS_IP4=1")
+	}
+
 	output, err := cmd.CombinedOutput()
 	return string(bytes.TrimSpace(output)), err
 }

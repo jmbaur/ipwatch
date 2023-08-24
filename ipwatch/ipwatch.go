@@ -126,8 +126,6 @@ type WatcherConfig struct {
 type WatchConfig struct {
 	Filters         []string
 	Hooks           []string
-	IPv4            bool
-	IPv6            bool
 	Interfaces      []string
 	MaxRetries      uint
 	HookEnvironment []string
@@ -441,17 +439,6 @@ func (w *Watcher) generateCache(interfaces []string, filters []string, hooks []H
 // Watch watches for IP address changes performs hook actions on new IP
 // addresses. This function blocks.
 func (w *Watcher) Watch(cfg WatchConfig) error {
-	if cfg.IPv4 && cfg.IPv6 {
-		return ErrInvalidIPProtocol
-	}
-
-	if cfg.IPv4 {
-		cfg.Filters = append(cfg.Filters, "Is4")
-	}
-	if cfg.IPv6 {
-		cfg.Filters = append(cfg.Filters, "Is6")
-	}
-
 	if len(cfg.Hooks) == 0 {
 		cfg.Hooks = append(cfg.Hooks, "internal:echo")
 	}

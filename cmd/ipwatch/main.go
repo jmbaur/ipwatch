@@ -30,9 +30,6 @@ func logic() error {
 		"The maximum number of attempts that will be made for a failing script.",
 	)
 
-	doIPv4 := flag.Bool("4", false, "Watch only for IPv4 address changes")
-	doIPv6 := flag.Bool("6", false, "Watch only for IPv6 address changes")
-
 	flag.Func("filter",
 		"Conditions that must be true before running scripts. See methods for https://pkg.go.dev/net/netip#Addr that start with 'Is'.",
 		func(filter string) error {
@@ -97,8 +94,6 @@ func logic() error {
 	return watcher.Watch(ipwatch.WatchConfig{
 		Filters:         filters,
 		Hooks:           hooks,
-		IPv4:            *doIPv4,
-		IPv6:            *doIPv6,
 		Interfaces:      ifaces,
 		MaxRetries:      *maxRetries,
 		HookEnvironment: hookEnvironment,
