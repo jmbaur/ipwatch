@@ -52,7 +52,7 @@ func (e *Echo) Name() string {
 
 // Run implements Hook
 func (e *Echo) Run(ifaceIdx uint32, addr netip.Addr) (string, error) {
-	return fmt.Sprintf("New IP for %d: %s", ifaceIdx, addr), nil
+	return fmt.Sprintf("New IP for interface index %d: %s", ifaceIdx, addr), nil
 }
 
 // Executable is a hook that can run an arbitrary executable after an IP
