@@ -6,7 +6,6 @@ Run hooks (code, executables, etc.) on changes to IP addresses.
 
 ```console
 $ ipwatch \
-	[-4] [-6] \
 	[-filter=FILTER ...] \
 	[-interface=IFACE ...] \
 	[-max-retries=NUM] \
