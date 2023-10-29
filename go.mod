@@ -1,6 +1,8 @@
 module github.com/jmbaur/ipwatch
 
-go 1.18
+go 1.21
+
+toolchain go1.21.3
 
 require (
 	github.com/mdlayher/netlink v1.7.2
