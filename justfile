@@ -19,6 +19,6 @@ update:
 	go get -u all
 	go mod tidy
 	export NIX_PATH="nixpkgs=$(nix flake prefetch nixpkgs --json | jq --raw-output '.storePath')"
-	newvendorSha256="$(nix-prefetch \
-	 "{ sha256 }: ((import <nixpkgs> {}).callPackage ./. {}).goModules.overrideAttrs (_: { vendorSha256 = sha256; })")"
-	sed -i "s|vendorSha256.*|vendorSha256 = \"$newvendorSha256\";|" default.nix
+	newvendorHash="$(nix-prefetch \
+	 "{ sha256 }: ((import <nixpkgs> {}).callPackage ./. {}).goModules.overrideAttrs (_: { vendorHash = sha256; })")"
+	sed -i "s|vendorHash.*|vendorHash = \"$newvendorHash\";|" default.nix
