@@ -1,7 +1,15 @@
-{ config, lib, pkgs, utils, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  utils,
+  ...
+}:
 let
   cfg = config.services.ipwatch;
-  deps = map (iface: "sys-subsystem-net-devices-${utils.escapeSystemdPath iface}.device") cfg.interfaces;
+  deps = map (
+    iface: "sys-subsystem-net-devices-${utils.escapeSystemdPath iface}.device"
+  ) cfg.interfaces;
 in
 {
   options.services.ipwatch = with lib; {
@@ -50,13 +58,20 @@ in
       enable = true;
       description = "ipwatch (https://github.com/jmbaur/ipwatch)";
       serviceConfig = {
-        LoadCredential = lib.optional (cfg.hookEnvironmentFile != null) "hook-environment-file:${cfg.hookEnvironmentFile}";
-        ExecStart = lib.escapeShellArgs ([ "${cfg.package}/bin/ipwatch" ] ++
-          lib.flatten (
-            (map (iface: "-interface=${iface}") cfg.interfaces) ++
-              (map (hook: "-hook=${hook}") cfg.hooks) ++
-              (map (filter: "-filter=${filter}") cfg.filters)
-          ) ++ (lib.optional (cfg.hookEnvironmentFile != null) "-env=\${CREDENTIALS_DIRECTORY}/hook-environment-file") ++ cfg.extraArgs
+        LoadCredential = lib.optional (
+          cfg.hookEnvironmentFile != null
+        ) "hook-environment-file:${cfg.hookEnvironmentFile}";
+        ExecStart = lib.escapeShellArgs (
+          [ "${cfg.package}/bin/ipwatch" ]
+          ++ lib.flatten (
+            (map (iface: "-interface=${iface}") cfg.interfaces)
+            ++ (map (hook: "-hook=${hook}") cfg.hooks)
+            ++ (map (filter: "-filter=${filter}") cfg.filters)
+          )
+          ++ (lib.optional (
+            cfg.hookEnvironmentFile != null
+          ) "-env=\${CREDENTIALS_DIRECTORY}/hook-environment-file")
+          ++ cfg.extraArgs
         );
 
         CapabilityBoundingSet = [ ];
@@ -75,7 +90,11 @@ in
         ProtectKernelTunables = true;
         ProtectSystem = "strict";
         RemoveIPC = true;
-        RestrictAddressFamilies = [ "AF_NETLINK" "AF_INET" "AF_INET6" ];
+        RestrictAddressFamilies = [
+          "AF_NETLINK"
+          "AF_INET"
+          "AF_INET6"
+        ];
         RestrictNamespaces = true;
         RestrictRealtime = true;
         RestrictSUIDSGID = true;
