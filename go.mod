@@ -6,7 +6,7 @@ toolchain go1.21.3
 
 require (
 	github.com/mdlayher/netlink v1.7.2
-	golang.org/x/sys v0.19.0
+	golang.org/x/sys v0.20.0
 )
 
 require (
