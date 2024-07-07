@@ -3,7 +3,7 @@ buildGoModule {
   pname = "ipwatch";
   version = "0.2.3";
   src = ./.;
-  vendorHash = "sha256-fC9pv2iStQeWoLaojGk4QNKgtESeOfz+SMVRCm5QjA0=";
+  vendorHash = "sha256-rtVXJTfSZh+TZwPX59W0TtD51GNLMoghIboyDIdoJOw=";
   ldflags = [
     "-s"
     "-w"
