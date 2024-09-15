@@ -37,11 +37,10 @@
           inherit
             (git-hooks.lib.${system}.run {
               src = ./.;
-              hooks.nixfmt.enable = true;
-              hooks.nixfmt.package = pkgs.nixfmt-rfc-style;
-              hooks.govet.enable = true;
-              hooks.revive.enable = true;
               hooks.gofmt.enable = true;
+              hooks.govet.enable = true;
+              hooks.nixfmt-rfc-style.enable = true;
+              hooks.revive.enable = true;
             })
             shellHook
             ;
