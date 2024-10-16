@@ -15,6 +15,7 @@ import (
 	"time"
 	"unsafe"
 
+	systemdDaemon "github.com/coreos/go-systemd/daemon"
 	"github.com/mdlayher/netlink"
 	"golang.org/x/sys/unix"
 )
@@ -455,6 +456,8 @@ func (w *Watcher) Watch(cfg WatchConfig) error {
 			"Listening for IP address changes on all interfaces",
 		)
 	}
+
+	systemdDaemon.SdNotify(false, systemdDaemon.SdNotifyReady)
 
 	w.log.Println("Opening netlink socket")
 	conn, err := netlink.Dial(unix.NETLINK_ROUTE, &netlink.Config{
