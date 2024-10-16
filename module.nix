@@ -43,12 +43,12 @@ in
         Filters to apply on new IP addresses that will conditionally run hooks.
       '';
     };
-    hookEnvironmentFile = lib.mkOption {
+    environmentFile = lib.mkOption {
       type = types.nullOr types.path;
       default = null;
       description = ''
-        File to use to set the environment for executable hooks. Each line in
-        this file should be of the form `KEY=VAL`.
+        File to use to set the environment for the ipwatch systemd service.
+        This environment will be propagated to each hook.
       '';
     };
   };
@@ -58,19 +58,14 @@ in
       enable = true;
       description = "ipwatch (https://github.com/jmbaur/ipwatch)";
       serviceConfig = {
-        LoadCredential = lib.optional (
-          cfg.hookEnvironmentFile != null
-        ) "hook-environment-file:${cfg.hookEnvironmentFile}";
+        EnvironmentFile = lib.mkIf (cfg.environmentFile != null) cfg.environmentFile;
         ExecStart = lib.escapeShellArgs (
-          [ "${cfg.package}/bin/ipwatch" ]
+          [ (lib.getExe cfg.package) ]
           ++ lib.flatten (
             (map (iface: "-interface=${iface}") cfg.interfaces)
             ++ (map (hook: "-hook=${hook}") cfg.hooks)
             ++ (map (filter: "-filter=${filter}") cfg.filters)
           )
-          ++ (lib.optional (
-            cfg.hookEnvironmentFile != null
-          ) "-env=\${CREDENTIALS_DIRECTORY}/hook-environment-file")
           ++ cfg.extraArgs
         );
 
@@ -100,11 +95,10 @@ in
         RestrictSUIDSGID = true;
         SystemCallArchitectures = "native";
       };
-      wantedBy = [ "multi-user.target" ] ++ deps;
-      wants = [ "network.target" ];
-      bindsTo = deps;
+      wantedBy = [ "multi-user.target" ];
+      before = [ "network-pre.target" ];
+      wants = deps;
       after = deps;
-      before = [ "network.target" ];
     };
   };
 }

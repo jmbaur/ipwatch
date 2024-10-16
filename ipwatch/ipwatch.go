@@ -44,16 +44,7 @@ var validFilters = map[string]struct{}{
 }
 
 func printOutput(outputs ...string) {
-	var largest int
-	for _, output := range outputs {
-		for _, line := range strings.Split(output, "\n") {
-			if len(line) > largest {
-				largest = len(line)
-			}
-		}
-	}
-
-	separator := strings.Repeat("-", largest)
+	separator := strings.Repeat("-", 120)
 	fmt.Println(separator)
 	for _, output := range outputs {
 		fmt.Println(output)
@@ -124,11 +115,10 @@ type WatcherConfig struct {
 
 // WatchConfig sets filters and hooks for the watcher.
 type WatchConfig struct {
-	Filters         []string
-	Hooks           []string
-	Interfaces      []string
-	MaxRetries      uint
-	HookEnvironment []string
+	Filters    []string
+	Hooks      []string
+	Interfaces []string
+	MaxRetries uint
 }
 
 // Watcher can be used to watch changes to IP addresses, optionally filtering
@@ -218,7 +208,7 @@ func (w *Watcher) handleDelAddr(msg netlink.Message) error {
 	return nil
 }
 
-func (w *Watcher) handleNewAddr(msg netlink.Message, filters []string, hooks []Hook, maxRetries uint, startup bool) error {
+func (w *Watcher) handleNewAddr(msg netlink.Message, filters []string, hooks []string, maxRetries uint, startup bool) error {
 	w.log.Println("Handling new address message")
 
 	ifaddrmsg, err := getIfAddrmsg(msg.Data)
@@ -316,10 +306,10 @@ func (w *Watcher) handleNewAddr(msg netlink.Message, filters []string, hooks []H
 			for i := 1; i <= int(maxRetries); i++ {
 				backoff := time.Duration(math.Pow(2, float64(i))) * time.Second
 
-				hookOutput, err := hook.Run(ifaddrmsg.Index, newIP)
+				hookOutput, err := runHook(hook, ifaddrmsg.Index, newIP)
 				if err != nil {
 					outputs := []string{}
-					outputs = append(outputs, fmt.Sprintf("Hook '%s' failed", hook.Name()))
+					outputs = append(outputs, fmt.Sprintf("Hook '%s' failed", hook))
 					if len(hookOutput) > 0 {
 						outputs = append(outputs, hookOutput)
 					}
@@ -339,7 +329,7 @@ func (w *Watcher) handleNewAddr(msg netlink.Message, filters []string, hooks []H
 				}
 
 				outputs := []string{}
-				outputs = append(outputs, fmt.Sprintf("Hook '%s' succeeded", hook.Name()))
+				outputs = append(outputs, fmt.Sprintf("Hook '%s' succeeded", hook))
 				if len(hookOutput) > 0 {
 					outputs = append(outputs, hookOutput)
 				}
@@ -350,7 +340,6 @@ func (w *Watcher) handleNewAddr(msg netlink.Message, filters []string, hooks []H
 
 				wg.Done()
 				break
-
 			}
 		}()
 	}
@@ -368,7 +357,7 @@ func (w *Watcher) cacheAddr(iface int, addr netip.Addr) {
 	}
 }
 
-func (w *Watcher) generateCache(interfaces []string, filters []string, hooks []Hook, maxRetries uint) error {
+func (w *Watcher) generateCache(interfaces []string, filters []string, hooks []string, maxRetries uint) error {
 	conn, err := netlink.Dial(unix.NETLINK_ROUTE, &netlink.Config{Strict: true})
 	if err != nil {
 		return err
@@ -439,18 +428,6 @@ func (w *Watcher) generateCache(interfaces []string, filters []string, hooks []H
 // Watch watches for IP address changes performs hook actions on new IP
 // addresses. This function blocks.
 func (w *Watcher) Watch(cfg WatchConfig) error {
-	if len(cfg.Hooks) == 0 {
-		cfg.Hooks = append(cfg.Hooks, "internal:echo")
-	}
-	hooks := []Hook{}
-	for _, hookName := range cfg.Hooks {
-		hook, err := NewHook(hookName, cfg.HookEnvironment)
-		if err != nil {
-			return fmt.Errorf("%w: %s", err, hookName)
-		}
-		hooks = append(hooks, hook)
-	}
-
 	filterMap := map[string]struct{}{}
 	for _, filter := range cfg.Filters {
 		if !isValidFilter(filter) {
@@ -464,7 +441,7 @@ func (w *Watcher) Watch(cfg WatchConfig) error {
 		filters = append(filters, k)
 	}
 
-	if err := w.generateCache(cfg.Interfaces, filters, hooks, cfg.MaxRetries); err != nil {
+	if err := w.generateCache(cfg.Interfaces, filters, cfg.Hooks, cfg.MaxRetries); err != nil {
 		return err
 	}
 
@@ -504,7 +481,7 @@ func (w *Watcher) Watch(cfg WatchConfig) error {
 				}
 			case unix.RTM_NEWADDR:
 				startup := false
-				if err := w.handleNewAddr(msg, filters, hooks, cfg.MaxRetries, startup); err != nil {
+				if err := w.handleNewAddr(msg, filters, cfg.Hooks, cfg.MaxRetries, startup); err != nil {
 					w.log.Println(err)
 				}
 			}

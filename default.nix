@@ -9,4 +9,5 @@ buildGoModule {
     "-w"
   ];
   CGO_ENABLED = 0;
+  meta.mainProgram = "ipwatch";
 }

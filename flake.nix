@@ -14,7 +14,7 @@
       git-hooks,
     }:
     {
-      overlays.default = _: prev: { ipwatch = prev.callPackage ./. { }; };
+      overlays.default = final: _: { ipwatch = final.callPackage ./. { }; };
       nixosModules.default = {
         nixpkgs.overlays = [ self.overlays.default ];
         imports = [ ./module.nix ];
@@ -33,7 +33,8 @@
             }
           );
       devShells = nixpkgs.lib.mapAttrs (system: pkgs: {
-        default = self.devShells.${system}.ci.overrideAttrs (old: {
+        default = pkgs.mkShell {
+          inputsFrom = [ pkgs.ipwatch ];
           inherit
             (git-hooks.lib.${system}.run {
               src = ./.;
@@ -41,23 +42,14 @@
               hooks.govet.enable = true;
               hooks.nixfmt-rfc-style.enable = true;
               hooks.revive.enable = true;
+              hooks.staticcheck.enable = true;
             })
             shellHook
             ;
-        });
-        ci = pkgs.mkShell {
-          inputsFrom = [ pkgs.ipwatch ];
-          buildInputs = with pkgs; [
-            go-tools
-            just
-            nix-prefetch
-            revive
-          ];
         };
       }) self.legacyPackages;
-      packages = nixpkgs.lib.mapAttrs (_: pkgs: {
-        default = pkgs.ipwatch;
-        test = pkgs.callPackage ./test.nix { module = self.nixosModules.default; };
+      checks = nixpkgs.lib.mapAttrs (_: pkgs: {
+        default = pkgs.callPackage ./test.nix { module = self.nixosModules.default; };
       }) self.legacyPackages;
     };
 }

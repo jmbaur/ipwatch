@@ -1,18 +1,11 @@
-# vim: ft=make
-
 help:
 	@just --list
 
 build:
-	go build -o $out/ipwatch ./cmd/ipwatch
+	go build -o $out/ipwatch {{justfile_directory()}}/cmd/ipwatch
 
-run:
-	go run ./cmd/ipwatch -debug -filter=!IsLoopback
-
-check: build
-	go test ./...
-	revive -set_exit_status=1 ./...
-	staticcheck ./...
+run *ARGS:
+	go run ./cmd/ipwatch -hook {{justfile_directory()}}/test-hook.sh -debug -filter=!IsLoopback {{ARGS}}
 
 update:
 	#!/usr/bin/env bash

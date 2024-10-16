@@ -4,14 +4,9 @@
 package main
 
 import (
-	"bufio"
-	"bytes"
 	"flag"
-	"io"
 	"log"
-	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/jmbaur/ipwatch/ipwatch"
 )
@@ -22,7 +17,6 @@ func logic() error {
 	filters := []string{}
 
 	debug := flag.Bool("debug", false, "Run in debug mode")
-	envFile := flag.String("env", "", "File containing environment variables to set when running executable hooks (in the form KEY=VAL on each line)")
 
 	maxRetries := flag.Uint(
 		"max-retries",
@@ -39,7 +33,7 @@ func logic() error {
 
 	flag.Func(
 		"hook",
-		"A hook to run upon receiving a new IP address.",
+		"Path to program to run upon receiving a new IP address.",
 		func(script string) error {
 			hooks = append(hooks, filepath.Join(script))
 			return nil
@@ -60,43 +54,11 @@ func logic() error {
 		return err
 	}
 
-	hookEnvironment := []string{}
-	if *envFile != "" {
-		f, err := os.Open(*envFile)
-		if err != nil {
-			return err
-		}
-		contents, err := io.ReadAll(f)
-		if err != nil {
-			return err
-		}
-		r := bufio.NewReader(bytes.NewReader(contents))
-		for {
-			bline, _, err := r.ReadLine()
-			if err != nil {
-				if err == io.EOF {
-					break
-				}
-				return err
-			}
-			line := strings.TrimSpace(string(bline))
-			if line == "" {
-				continue
-			}
-			if strings.HasPrefix(line, "#") {
-				continue
-			}
-			hookEnvironment = append(hookEnvironment, line)
-		}
-		f.Close()
-	}
-
 	return watcher.Watch(ipwatch.WatchConfig{
-		Filters:         filters,
-		Hooks:           hooks,
-		Interfaces:      ifaces,
-		MaxRetries:      *maxRetries,
-		HookEnvironment: hookEnvironment,
+		Filters:    filters,
+		Hooks:      hooks,
+		Interfaces: ifaces,
+		MaxRetries: *maxRetries,
 	})
 }
 

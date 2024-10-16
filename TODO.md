@@ -1,0 +1,2 @@
+- Hooks should be ran in a separate goroutine that allows the main goroutine to continue listening for IP address changes. This allows for IP address changes to still be addressed should long-running hooks take take longer than it does before the next IP address change. If an IP address changes one or more times during the hook execution, we should cache the last change and call the set of hooks again with said change.
+- Per-interface filters

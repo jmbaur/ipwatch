@@ -14,4 +14,4 @@ jobs:
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@main
       - name: check
-        run: nix develop .\#ci --command sh -c "just check"
+        run: nix flake check --print-build-logs
