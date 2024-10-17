@@ -58,6 +58,7 @@ in
       enable = true;
       description = "ipwatch (https://github.com/jmbaur/ipwatch)";
       serviceConfig = {
+        Type = "notify";
         EnvironmentFile = lib.mkIf (cfg.environmentFile != null) cfg.environmentFile;
         ExecStart = lib.escapeShellArgs (
           [ (lib.getExe cfg.package) ]
