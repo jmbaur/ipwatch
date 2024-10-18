@@ -5,61 +5,54 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
-	"path/filepath"
+	"strings"
 
 	"github.com/jmbaur/ipwatch/ipwatch"
 )
 
 func logic() error {
-	hooks := []string{}
-	ifaces := []string{}
-	filters := []string{}
-
-	debug := flag.Bool("debug", false, "Run in debug mode")
-
-	maxRetries := flag.Uint(
-		"max-retries",
-		3,
-		"The maximum number of attempts that will be made for a failing script.",
-	)
-
-	flag.Func("filter",
-		"Conditions that must be true before running scripts. See methods for https://pkg.go.dev/net/netip#Addr that start with 'Is'.",
-		func(filter string) error {
-			filters = append(filters, filter)
-			return nil
-		})
+	hooks := map[string]ipwatch.Hook{}
 
 	flag.Func(
 		"hook",
-		"Path to program to run upon receiving a new IP address.",
-		func(script string) error {
-			hooks = append(hooks, filepath.Join(script))
-			return nil
-		},
-	)
-	flag.Func(
-		"interface",
-		"The name of an interface to notify for changes.",
-		func(iface string) error {
-			ifaces = append(ifaces, iface)
+		"Hook specifier of the form <iface>:<filter1>,<filter2>,...:<program>",
+		func(hookStr string) error {
+			split := strings.SplitN(hookStr, ":", 3)
+			if len(split) != 3 {
+				return fmt.Errorf("invalid hook specifier %s", hookStr)
+			}
+
+			if _, duplicate := hooks[split[0]]; duplicate {
+				return fmt.Errorf("hook for interface %s specified more than once", split[0])
+			}
+
+			filters := strings.Split(split[1], ",")
+			if filters[0] == "" {
+				filters = []string{}
+			}
+
+			hooks[split[0]] = ipwatch.NewHook(
+				split[2],
+				filters,
+			)
+
 			return nil
 		},
 	)
 	flag.Parse()
 
-	watcher, err := ipwatch.NewWatcher(ipwatch.WatcherConfig{Debug: *debug})
+	if len(hooks) == 0 {
+		return fmt.Errorf("no hooks specified")
+	}
+
+	watcher, err := ipwatch.NewWatcher()
 	if err != nil {
 		return err
 	}
 
-	return watcher.Watch(ipwatch.WatchConfig{
-		Filters:    filters,
-		Hooks:      hooks,
-		Interfaces: ifaces,
-		MaxRetries: *maxRetries,
-	})
+	return watcher.Watch(hooks)
 }
 
 func main() {

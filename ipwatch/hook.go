@@ -8,8 +8,8 @@ import (
 	"os/exec"
 )
 
-func runHook(hookPath string, ifaceIdx uint32, addr netip.Addr) (string, error) {
-	cmd := exec.Command(hookPath)
+func runHook(program string, ifaceIdx uint32, addr netip.Addr) (string, error) {
+	cmd := exec.Command(program)
 	cmd.Env = append(cmd.Env, os.Environ()...) // inherit from current environment
 	cmd.Env = append(cmd.Env, fmt.Sprintf("IFACE_IDX=%d", ifaceIdx))
 	cmd.Env = append(cmd.Env, fmt.Sprintf("ADDR=%s", addr))

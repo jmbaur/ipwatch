@@ -1,12 +1,6 @@
 help:
 	@just --list
 
-build:
-	go build -o $out/ipwatch {{justfile_directory()}}/cmd/ipwatch
-
-run *ARGS:
-	go run ./cmd/ipwatch -hook {{justfile_directory()}}/test-hook.sh -debug -filter=!IsLoopback {{ARGS}}
-
 update:
 	#!/usr/bin/env bash
 	go get -u all

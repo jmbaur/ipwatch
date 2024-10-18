@@ -27,7 +27,7 @@ func TestPassesFilter(t *testing.T) {
 	}
 
 	for _, tc := range tt {
-		if got := passesFilter(tc.inputAddr, tc.inputFilter); got != tc.expect {
+		if got := passesFilters(tc.inputAddr, tc.inputFilter); got != tc.expect {
 			t.Fatalf("%s: got: %v, wanted: %v\n", tc.name, got, tc.expect)
 		}
 	}
