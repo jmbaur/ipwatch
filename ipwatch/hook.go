@@ -17,7 +17,9 @@ func runHook(program string, ifaceIdx uint32, addr netip.Addr) (string, error) {
 	switch {
 	case addr.Is6():
 		cmd.Env = append(cmd.Env, "IS_IP6=1")
+		cmd.Env = append(cmd.Env, "IS_IP4=0")
 	case addr.Is4():
+		cmd.Env = append(cmd.Env, "IS_IP6=0")
 		cmd.Env = append(cmd.Env, "IS_IP4=1")
 	}
 
