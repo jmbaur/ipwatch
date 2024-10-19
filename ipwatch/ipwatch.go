@@ -3,11 +3,11 @@
 package ipwatch
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"net"
 	"net/netip"
+	"reflect"
 	"strings"
 	"syscall"
 	"time"
@@ -18,30 +18,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-var (
-	// ErrIncorrectSizeOf indicates the incorrect size was present
-	ErrIncorrectSizeOf = errors.New("incorrect size of")
-	// ErrInvalidFilter indicates that the filter is not supported
-	ErrInvalidFilter = errors.New("invalid filter")
-	// ErrInvalidIPProtocol indicates that the IP protocol is not supported
-	ErrInvalidIPProtocol = errors.New("only one of -4 and -6 allowed")
-)
-
-var validFilters = map[string]struct{}{
-	"Is4":                       {},
-	"Is4In6":                    {},
-	"Is6":                       {},
-	"IsGlobalUnicast":           {},
-	"IsInterfaceLocalMulticast": {},
-	"IsLinkLocalMulticast":      {},
-	"IsLinkLocalUnicast":        {},
-	"IsLoopback":                {},
-	"IsMulticast":               {},
-	"IsPrivate":                 {},
-	"IsUnspecified":             {},
-	"IsValid":                   {},
-}
-
 func printOutput(outputs ...string) {
 	separator := strings.Repeat("=", 3)
 	fmt.Println(separator)
@@ -51,16 +27,9 @@ func printOutput(outputs ...string) {
 	fmt.Println(separator)
 }
 
-func isValidFilter(filter string) bool {
-	test := filter
-	if strings.HasPrefix(filter, "!") {
-		test = filter[1:]
-	}
-	_, ok := validFilters[test]
-	return ok
-}
-
 func passesFilters(addr netip.Addr, filters ...string) bool {
+	value := reflect.ValueOf(addr)
+
 	for _, filter := range filters {
 		var not, result bool
 
@@ -68,32 +37,15 @@ func passesFilters(addr netip.Addr, filters ...string) bool {
 			not = true
 			filter = filter[1:]
 		}
-		switch filter {
-		case "Is4":
-			result = addr.Is4()
-		case "Is4In6":
-			result = addr.Is4In6()
-		case "Is6":
-			result = addr.Is6()
-		case "IsGlobalUnicast":
-			result = addr.IsGlobalUnicast()
-		case "IsInterfaceLocalMulticast":
-			result = addr.IsInterfaceLocalMulticast()
-		case "IsLinkLocalMulticast":
-			result = addr.IsLinkLocalMulticast()
-		case "IsLinkLocalUnicast":
-			result = addr.IsLinkLocalUnicast()
-		case "IsLoopback":
-			result = addr.IsLoopback()
-		case "IsMulticast":
-			result = addr.IsMulticast()
-		case "IsPrivate":
-			result = addr.IsPrivate()
-		case "IsUnspecified":
-			result = addr.IsUnspecified()
-		case "IsValid":
-			result = addr.IsValid()
+
+		method := value.MethodByName(filter)
+		if !method.IsValid() {
+			log.Printf("invalid filter %s, skipping\n", filter)
+			continue
 		}
+
+		ret := method.Call(nil)
+		result = ret[0].Bool()
 
 		if not {
 			result = !result
@@ -131,17 +83,6 @@ type WatchConfig struct {
 	MaxRetries uint
 }
 
-// Watcher can be used to watch changes to IP addresses, optionally filtering
-// on interface and/or IP address types.
-type Watcher struct {
-	log *log.Logger
-}
-
-// NewWatcher parses a WatchConfig and returns a new Watcher.
-func NewWatcher() (*Watcher, error) {
-	return &Watcher{log: log.Default()}, nil
-}
-
 func getIfAddrmsg(ifaddrmsg []byte) (*unix.IfAddrmsg, error) {
 	// struct ifaddrmsg {
 	//   __u8   ifa_family;
@@ -153,8 +94,8 @@ func getIfAddrmsg(ifaddrmsg []byte) (*unix.IfAddrmsg, error) {
 	return (*unix.IfAddrmsg)(unsafe.Pointer(&ifaddrmsg[0:unix.SizeofIfAddrmsg][0])), nil
 }
 
-func (w *Watcher) handleDelAddr(msg netlink.Message, hooks map[string]Hook) error {
-	w.log.Println("Handling delete address message")
+func handleDelAddr(msg netlink.Message, hooks map[string]Hook) error {
+	log.Println("Handling delete address message")
 
 	ifaddrmsg, err := getIfAddrmsg(msg.Data)
 	if err != nil {
@@ -175,7 +116,7 @@ func (w *Watcher) handleDelAddr(msg netlink.Message, hooks map[string]Hook) erro
 	}
 
 	if foundHook == nil {
-		w.log.Printf("Interface '%s' not found in hooks, skipping\n", gotIface.Name)
+		log.Printf("Interface '%s' not found in hooks, skipping\n", gotIface.Name)
 		return nil
 	}
 
@@ -193,7 +134,7 @@ func (w *Watcher) handleDelAddr(msg netlink.Message, hooks map[string]Hook) erro
 				if !ok {
 					return nil
 				}
-				w.log.Println("Deleting address from cache")
+				log.Println("Deleting address from cache")
 				delete(foundHook.ipCache, addr)
 			}
 		}
@@ -202,8 +143,8 @@ func (w *Watcher) handleDelAddr(msg netlink.Message, hooks map[string]Hook) erro
 	return nil
 }
 
-func (w *Watcher) handleNewAddr(msg netlink.Message, hooks map[string]Hook, startup bool) error {
-	w.log.Println("Handling new address message")
+func handleNewAddr(msg netlink.Message, hooks map[string]Hook, startup bool) error {
+	log.Println("Handling new address message")
 
 	ifaddrmsg, err := getIfAddrmsg(msg.Data)
 	if err != nil {
@@ -224,7 +165,7 @@ func (w *Watcher) handleNewAddr(msg netlink.Message, hooks map[string]Hook, star
 	}
 
 	if foundHook == nil {
-		w.log.Printf("Interface '%s' not found in hooks, skipping\n", gotIface.Name)
+		log.Printf("Interface '%s' not found in hooks, skipping\n", gotIface.Name)
 		return nil
 	}
 
@@ -261,12 +202,12 @@ func (w *Watcher) handleNewAddr(msg netlink.Message, hooks map[string]Hook, star
 				ip := ad.Bytes()
 				addr, ok := netip.AddrFromSlice(ip)
 				if !ok {
-					w.log.Println("Address not of length 4 or 16")
+					log.Println("Address not of length 4 or 16")
 					return nil
 				}
 
 				if _, ok := foundHook.ipCache[addr]; ok {
-					w.log.Println("New addr was found in cache, skipping hooks")
+					log.Println("New addr was found in cache, skipping hooks")
 					return nil
 				}
 
@@ -276,23 +217,23 @@ func (w *Watcher) handleNewAddr(msg netlink.Message, hooks map[string]Hook, star
 	}
 
 	if !newIP.IsValid() {
-		w.log.Println("No address found, skipping hooks")
+		log.Println("No address found, skipping hooks")
 		return nil
 	}
 
 	if !passesFilters(newIP, foundHook.Filters...) {
-		w.log.Println("Address does not pass filters, skipping hooks")
+		log.Println("Address does not pass filters, skipping hooks")
 		return nil
 	}
 
-	w.log.Println("Caching new address", newIP)
+	log.Println("Caching new address", newIP)
 	foundHook.ipCache[newIP] = struct{}{}
 
 	if !fresh && startup {
-		w.log.Println("IP address is not new and the program did not just startup, skipping hooks")
+		log.Println("IP address is not new and the program did not just startup, skipping hooks")
 		return nil
 	} else if fresh && startup {
-		w.log.Println("Fresh IP address and starting up, running hooks")
+		log.Println("Fresh IP address and starting up, running hooks")
 	}
 
 	{
@@ -317,14 +258,14 @@ func (w *Watcher) handleNewAddr(msg netlink.Message, hooks map[string]Hook, star
 	return nil
 }
 
-func (w *Watcher) generateCache(hooks map[string]Hook) error {
+func generateCache(hooks map[string]Hook) error {
 	conn, err := netlink.Dial(unix.NETLINK_ROUTE, &netlink.Config{Strict: true})
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
 
-	w.log.Println("Caching initial IPs")
+	log.Println("Caching initial IPs")
 	responses, err := conn.Execute(netlink.Message{
 		Header: netlink.Header{Type: unix.RTM_GETADDR, Flags: unix.NLM_F_REQUEST | unix.NLM_F_DUMP},
 		Data:   (*(*[unix.SizeofIfAddrmsg]byte)(unsafe.Pointer(&unix.IfAddrmsg{Family: unix.AF_UNSPEC})))[:],
@@ -335,7 +276,7 @@ func (w *Watcher) generateCache(hooks map[string]Hook) error {
 
 	for _, msg := range responses {
 		if msg.Header.Type == unix.RTM_NEWADDR {
-			if err := w.handleNewAddr(msg, hooks, true); err != nil {
+			if err := handleNewAddr(msg, hooks, true); err != nil {
 				return err
 			}
 		}
@@ -346,29 +287,12 @@ func (w *Watcher) generateCache(hooks map[string]Hook) error {
 
 // Watch watches for IP address changes performs hook actions on new IP
 // addresses. This function blocks.
-func (w *Watcher) Watch(hooks map[string]Hook) error {
+func Watch(hooks map[string]Hook) error {
 	if len(hooks) == 0 {
 		panic("unreachable")
 	}
 
-	filterMap := map[string]struct{}{}
-	for _, hook := range hooks {
-		for _, filter := range hook.Filters {
-			if !isValidFilter(filter) {
-				return fmt.Errorf("%w: %s", ErrInvalidFilter, filter)
-			}
-			filterMap[filter] = struct{}{}
-		}
-
-		filtersDedup := []string{}
-		for k := range filterMap {
-			filtersDedup = append(filtersDedup, k)
-		}
-
-		hook.Filters = filtersDedup
-	}
-
-	if err := w.generateCache(hooks); err != nil {
+	if err := generateCache(hooks); err != nil {
 		return err
 	}
 
@@ -376,7 +300,7 @@ func (w *Watcher) Watch(hooks map[string]Hook) error {
 	for iface := range hooks {
 		ifaceDisplay = append(ifaceDisplay, iface)
 	}
-	w.log.Printf(
+	log.Printf(
 		"Listening for IP address changes on %s\n",
 		strings.Join(ifaceDisplay, ", "),
 	)
@@ -386,10 +310,10 @@ func (w *Watcher) Watch(hooks map[string]Hook) error {
 		return err
 	}
 	if !notifySupported {
-		w.log.Println("Systemd notify not supported in current running environment")
+		log.Println("Systemd notify not supported in current running environment")
 	}
 
-	w.log.Println("Opening netlink socket")
+	log.Println("Opening netlink socket")
 	conn, err := netlink.Dial(unix.NETLINK_ROUTE, &netlink.Config{
 		Groups: unix.RTMGRP_IPV4_IFADDR | unix.RTMGRP_IPV6_IFADDR,
 		Strict: true,
@@ -402,19 +326,19 @@ func (w *Watcher) Watch(hooks map[string]Hook) error {
 	for {
 		msgs, err := conn.Receive()
 		if err != nil {
-			w.log.Println(err)
+			log.Println(err)
 			continue
 		}
-		w.log.Println("Received netlink messages")
+		log.Println("Received netlink messages")
 		for _, msg := range msgs {
 			switch msg.Header.Type {
 			case unix.RTM_DELADDR:
-				if err := w.handleDelAddr(msg, hooks); err != nil {
-					w.log.Println(err)
+				if err := handleDelAddr(msg, hooks); err != nil {
+					log.Println(err)
 				}
 			case unix.RTM_NEWADDR:
-				if err := w.handleNewAddr(msg, hooks, false); err != nil {
-					w.log.Println(err)
+				if err := handleNewAddr(msg, hooks, false); err != nil {
+					log.Println(err)
 				}
 			}
 		}

@@ -47,12 +47,7 @@ func logic() error {
 		return fmt.Errorf("no hooks specified")
 	}
 
-	watcher, err := ipwatch.NewWatcher()
-	if err != nil {
-		return err
-	}
-
-	return watcher.Watch(hooks)
+	return ipwatch.Watch(hooks)
 }
 
 func main() {
