@@ -14,7 +14,7 @@
       git-hooks,
     }:
     {
-      overlays.default = final: _: { ipwatch = final.callPackage ./. { }; };
+      overlays.default = final: _: { ipwatch = final.callPackage ./package.nix { }; };
       nixosModules.default = {
         nixpkgs.overlays = [ self.overlays.default ];
         imports = [ ./module.nix ];
