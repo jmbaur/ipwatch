@@ -12,7 +12,7 @@
       self,
       nixpkgs,
       git-hooks,
-    }:
+    }@inputs:
     {
       overlays.default = final: _: { ipwatch = final.callPackage ./package.nix { }; };
       nixosModules.default = {
@@ -49,7 +49,7 @@
         };
       }) self.legacyPackages;
       checks = nixpkgs.lib.mapAttrs (_: pkgs: {
-        default = pkgs.callPackage ./test.nix { module = self.nixosModules.default; };
+        default = pkgs.callPackage ./test.nix { inherit inputs; };
       }) self.legacyPackages;
     };
 }

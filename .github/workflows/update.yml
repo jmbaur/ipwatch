@@ -12,7 +12,7 @@ jobs:
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@main
       - name: Update go modules
-        run: nix develop .\#ci --command sh -c "just update"
+        run: nix develop --command sh -c "just update"
       - name: Create pull request
         uses: peter-evans/create-pull-request@v7
         with:
