@@ -11,7 +11,7 @@ buildGoModule {
       ./ipwatch
     ];
   };
-  vendorHash = "sha256-mlqf9WRoNNOBX2mAvLH/gr9Vi1kA6JTu2YRYN4CwM5E=";
+  vendorHash = "sha256-rrWLa80YtEldGDcoQZdOu5esZpFh06iCGMob/ODeoUY=";
   ldflags = [
     "-s"
     "-w"
