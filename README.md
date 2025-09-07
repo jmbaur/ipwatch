@@ -1,3 +1,3 @@
 # IPWatch
 
-Run hooks (code, executables, etc.) on changes to IP addresses.
+Stream json output to stdout on changes to IP addresses.

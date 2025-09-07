@@ -3,10 +3,12 @@
 package ipwatch
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net"
 	"net/netip"
+	"os"
 	"reflect"
 	"strings"
 	"syscall"
@@ -17,15 +19,6 @@ import (
 	"github.com/mdlayher/netlink"
 	"golang.org/x/sys/unix"
 )
-
-func printOutput(outputs ...string) {
-	separator := strings.Repeat("=", 3)
-	fmt.Println(separator)
-	for _, output := range outputs {
-		fmt.Println(output)
-	}
-	fmt.Println(separator)
-}
 
 func passesFilters(addr netip.Addr, filters ...string) bool {
 	value := reflect.ValueOf(addr)
@@ -62,25 +55,16 @@ func passesFilters(addr netip.Addr, filters ...string) bool {
 // Hook is the set of filters and program to run when an IP address on an
 // interface changes.
 type Hook struct {
-	Program string
 	Filters []string
 	ipCache map[netip.Addr]struct{}
 }
 
 // NewHook makes a new hook.
-func NewHook(program string, filters []string) Hook {
+func NewHook(filters []string) Hook {
 	return Hook{
-		Program: program,
 		Filters: filters,
 		ipCache: map[netip.Addr]struct{}{},
 	}
-}
-
-// WatchConfig sets filters and hooks for the watcher.
-type WatchConfig struct {
-	Hooks      []string
-	Interfaces []string
-	MaxRetries uint
 }
 
 func getIfAddrmsg(ifaddrmsg []byte) (*unix.IfAddrmsg, error) {
@@ -236,26 +220,27 @@ func handleNewAddr(msg netlink.Message, hooks map[string]Hook, startup bool) err
 		log.Println("Fresh IP address and starting up, running hooks")
 	}
 
-	{
-		outputs := []string{}
-
-		program := foundHook.Program
-		hookOutput, err := runHook(program, ifaddrmsg.Index, newIP)
-		if err == nil {
-			outputs = append(outputs, fmt.Sprintf("Hook '%s' succeeded", program))
-		} else {
-			outputs = append(outputs, fmt.Sprintf("Hook '%s' failed", program))
-			outputs = append(outputs, err.Error())
-		}
-
-		if len(hookOutput) > 0 {
-			outputs = append(outputs, hookOutput)
-		}
-
-		printOutput(outputs...)
+	out, err := json.Marshal(struct {
+		Ifindex   uint32 `json:"ifindex"`
+		PrefixLen uint8  `json:"prefixlen"`
+		Address   string `json:"address"`
+	}{
+		Ifindex:   ifaddrmsg.Index,
+		PrefixLen: ifaddrmsg.Prefixlen,
+		Address:   newIP.String(),
+	})
+	if err != nil {
+		log.Printf("failed to encode json: %v\n", err)
+		return err
 	}
 
-	return nil
+	if _, err := os.Stdout.Write(out); err != nil {
+		return err
+	}
+	if _, err := os.Stdout.WriteString("\n"); err != nil {
+		return err
+	}
+	return os.Stdout.Sync()
 }
 
 func generateCache(hooks map[string]Hook) error {

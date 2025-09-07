@@ -15,10 +15,6 @@
     }@inputs:
     {
       overlays.default = final: _: { ipwatch = final.callPackage ./package.nix { }; };
-      nixosModules.default = {
-        nixpkgs.overlays = [ self.overlays.default ];
-        imports = [ ./module.nix ];
-      };
       legacyPackages =
         nixpkgs.lib.genAttrs
           [
@@ -67,7 +63,7 @@
         };
       }) self.legacyPackages;
       checks = nixpkgs.lib.mapAttrs (_: pkgs: {
-        default = pkgs.callPackage ./test.nix { inherit inputs; };
+        default = pkgs.callPackage ./test.nix { };
       }) self.legacyPackages;
     };
 }

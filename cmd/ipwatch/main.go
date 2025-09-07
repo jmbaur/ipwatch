@@ -17,10 +17,10 @@ func logic() error {
 
 	flag.Func(
 		"hook",
-		"Hook specifier of the form <iface>:<filter1>,<filter2>,...:<program>",
+		"Hook specifier of the form <iface>:<filter1>,<filter2>,...",
 		func(hookStr string) error {
-			split := strings.SplitN(hookStr, ":", 3)
-			if len(split) != 3 {
+			split := strings.SplitN(hookStr, ":", 2)
+			if len(split) != 2 {
 				return fmt.Errorf("invalid hook specifier %s", hookStr)
 			}
 
@@ -34,7 +34,6 @@ func logic() error {
 			}
 
 			hooks[split[0]] = ipwatch.NewHook(
-				split[2],
 				filters,
 			)
 
