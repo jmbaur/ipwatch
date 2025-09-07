@@ -240,7 +240,8 @@ func handleNewAddr(msg netlink.Message, hooks map[string]Hook, startup bool) err
 	if _, err := os.Stdout.WriteString("\n"); err != nil {
 		return err
 	}
-	return os.Stdout.Sync()
+
+	return nil
 }
 
 func generateCache(hooks map[string]Hook) error {
