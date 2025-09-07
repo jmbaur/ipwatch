@@ -179,6 +179,8 @@ func handleNewAddr(msg netlink.Message, hooks map[string]Hook, startup bool) err
 				syscall.Syscall(syscall.SYS_CLOCK_GETTIME, unix.CLOCK_BOOTTIME, uintptr(unsafe.Pointer(&ts)), 0)
 				boottime := uint64(ts.Sec)
 				updatedAt := uint64(ifacacheinfo.Tstamp / 100)
+
+				// we consider the address "fresh" if it was updated in the last 30 seconds
 				fresh = time.Duration(boottime-updatedAt)*time.Second < 30*time.Second
 			}
 		case unix.IFA_ADDRESS:
@@ -214,10 +216,10 @@ func handleNewAddr(msg netlink.Message, hooks map[string]Hook, startup bool) err
 	foundHook.ipCache[newIP] = struct{}{}
 
 	if !fresh && startup {
-		log.Println("IP address is not new and the program did not just startup, skipping hooks")
+		log.Println("IP address is not new and we just started, skipping hooks")
 		return nil
 	} else if fresh && startup {
-		log.Println("Fresh IP address and starting up, running hooks")
+		log.Println("Fresh IP address and we just started, running hooks")
 	}
 
 	out, err := json.Marshal(struct {
