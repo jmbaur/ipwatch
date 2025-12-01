@@ -7,12 +7,12 @@ toolchain go1.24.6
 require (
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf
 	github.com/mdlayher/netlink v1.8.0
-	golang.org/x/sys v0.37.0
+	golang.org/x/sys v0.38.0
 )
 
 require (
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/mdlayher/socket v0.5.1 // indirect
-	golang.org/x/net v0.46.0 // indirect
-	golang.org/x/sync v0.17.0 // indirect
+	golang.org/x/net v0.47.0 // indirect
+	golang.org/x/sync v0.18.0 // indirect
 )
