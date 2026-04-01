@@ -5,12 +5,12 @@ go 1.25.0
 require (
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf
 	github.com/mdlayher/netlink v1.9.0
-	golang.org/x/sys v0.41.0
+	golang.org/x/sys v0.42.0
 )
 
 require (
 	github.com/google/go-cmp v0.7.0 // indirect
-	github.com/mdlayher/socket v0.5.1 // indirect
-	golang.org/x/net v0.51.0 // indirect
-	golang.org/x/sync v0.19.0 // indirect
+	github.com/mdlayher/socket v0.6.0 // indirect
+	golang.org/x/net v0.52.0 // indirect
+	golang.org/x/sync v0.20.0 // indirect
 )
