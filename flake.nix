@@ -12,7 +12,7 @@
       self,
       nixpkgs,
       git-hooks,
-    }@inputs:
+    }:
     {
       overlays.default = final: _: { ipwatch = final.callPackage ./package.nix { }; };
       legacyPackages =
@@ -36,7 +36,7 @@
               src = ./.;
               hooks.gofmt.enable = true;
               hooks.govet.enable = true;
-              hooks.nixfmt-rfc-style.enable = true;
+              hooks.nixfmt.enable = true;
               hooks.revive.enable = true;
               hooks.staticcheck.enable = true;
             })

@@ -50,6 +50,9 @@ func logic() error {
 }
 
 func main() {
+	// Remove date and timestamp from log output
+	log.SetFlags(0)
+
 	if err := logic(); err != nil {
 		log.Fatal(err)
 	}
