@@ -1,3 +1,1 @@
-# IPWatch
-
-Stream json output to stdout on changes to IP addresses.
+Moved to [codeberg](https://codeberg.org/jmbaur/ipwatch)
